@@ -1,0 +1,6 @@
+{
+  "name": "ProHRIS Suite - Enterprise & NGO HR Management System",
+  "description": "Comprehensive HRIS solution with Employee Database, Payroll & Payslips, Attendance & Timesheets, Leave Management, Performance Evaluation, HR Official Letters, and Compliance Dashboards.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

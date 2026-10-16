@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 746 1024" width="100%" height="100%">
+  <!-- LEEDO Red Emblem: Two stylized figures holding hands running -->
+  <g fill="#E51927" stroke="#E51927">
+    <!-- Child Head (Left) -->
+    <ellipse cx="230" cy="130" rx="46" ry="68" transform="rotate(-15 230 130)" stroke="none" />
+    
+    <!-- Adult / Guide Head (Right) -->
+    <ellipse cx="495" cy="80" rx="48" ry="72" transform="rotate(18 495 80)" stroke="none" />
+    
+    <!-- Stylized Joined Bodies & Running Limbs -->
+    <path d="M 235 198 
+             C 250 250, 290 280, 370 260
+             C 450 240, 520 200, 560 190
+             C 610 175, 680 130, 725 90
+             C 735 80, 745 85, 735 105
+             C 710 145, 645 200, 580 235
+             C 530 260, 480 285, 410 305
+             C 340 325, 275 355, 215 425
+             C 170 475, 120 535, 105 605
+             C 95 640, 50 690, 20 670
+             C 2 655, 15 625, 30 610
+             C 65 570, 110 500, 155 450
+             C 170 435, 190 400, 205 365
+             C 170 375, 120 390, 75 405
+             C 30 420, 2 410, 0 385
+             C -2 360, 25 350, 70 340
+             C 125 325, 180 300, 220 270
+             Z" stroke="none" />
+
+    <!-- Left Child Legs Running Forward -->
+    <path d="M 220 420 
+             C 230 470, 235 520, 215 570
+             C 200 605, 150 660, 75 685
+             C 35 698, 20 680, 30 655
+             C 45 615, 115 590, 145 565
+             C 165 545, 175 490, 175 440
+             Z" stroke="none" />
+             
+    <!-- Left Child Trailing Foot -->
+    <path d="M 270 335
+             C 300 400, 325 460, 335 530
+             C 345 590, 310 650, 290 680
+             C 275 700, 305 710, 330 690
+             C 370 655, 400 580, 385 510
+             C 370 450, 340 380, 305 320
+             Z" stroke="none" />
+
+    <!-- Right Guide Torso & Running Strides -->
+    <path d="M 520 240 
+             C 545 300, 565 370, 530 430
+             C 480 470, 420 480, 395 530
+             C 375 570, 390 630, 435 640
+             C 460 645, 475 620, 480 585
+             C 490 530, 540 500, 580 440
+             C 610 395, 605 320, 580 250
+             Z" stroke="none" />
+
+    <!-- Right Guide Back Leg Extended in Motion -->
+    <path d="M 560 410 
+             C 600 480, 645 560, 680 640
+             C 715 720, 740 760, 770 730
+             C 785 715, 765 675, 735 620
+             C 700 550, 660 470, 610 390
+             Z" stroke="none" />
+             
+    <path d="M 685 640
+             C 660 680, 630 730, 655 770
+             C 675 800, 720 780, 735 740
+             C 750 700, 730 650, 700 635
+             Z" stroke="none" />
+  </g>
+
+  <!-- Bold Typography: LEEDO -->
+  <text x="373" y="960" 
+        text-anchor="middle" 
+        font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" 
+        font-weight="900" 
+        font-size="160" 
+        letter-spacing="6" 
+        fill="#E51927">LEEDO</text>
+</svg>

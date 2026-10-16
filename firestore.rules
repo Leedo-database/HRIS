@@ -1,0 +1,60 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Master Employee Database
+    match /employees/{employeeId} {
+      allow read, write: if true;
+    }
+
+    // Daily Attendance and Punches
+    match /attendance/{attendanceId} {
+      allow read, write: if true;
+    }
+
+    // Leave Applications & Approvals
+    match /leaves/{leaveId} {
+      allow read, write: if true;
+    }
+
+    // Project Timesheets
+    match /timesheets/{timesheetId} {
+      allow read, write: if true;
+    }
+
+    // Payroll and Payslips
+    match /payroll/{payrollId} {
+      allow read, write: if true;
+    }
+
+    // Performance Appraisals
+    match /appraisals/{appraisalId} {
+      allow read, write: if true;
+    }
+
+    // Travel & Expense Claims
+    match /expenses/{expenseId} {
+      allow read, write: if true;
+    }
+
+    // Staff Separation, Clearance & Final Settlement
+    match /separations/{separationId} {
+      allow read, write: if true;
+    }
+
+    // Organization & Compliance Settings
+    match /company_settings/{settingId} {
+      allow read, write: if true;
+    }
+
+    // User Credentials & Password State
+    match /user_credentials/{employeeId} {
+      allow read, write: if true;
+    }
+
+    // Default deny for unmapped paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

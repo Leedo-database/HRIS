@@ -1,0 +1,126 @@
+{
+  "entities": {
+    "Employee": {
+      "title": "Employee",
+      "description": "Master employee personnel record for NGO and corporate staff",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fullName": { "type": "string" },
+        "banglaName": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "gender": { "type": "string" },
+        "dob": { "type": "string" },
+        "bloodGroup": { "type": "string" },
+        "nidOrPassport": { "type": "string" },
+        "avatar": { "type": "string" },
+        "presentAddress": { "type": "string" },
+        "permanentAddress": { "type": "string" },
+        "designation": { "type": "string" },
+        "department": { "type": "string" },
+        "gradeLevel": { "type": "string" },
+        "joiningDate": { "type": "string" },
+        "employmentType": { "type": "string" },
+        "status": { "type": "string" },
+        "workStation": { "type": "string" },
+        "assignedProject": { "type": "string" },
+        "grossSalary": { "type": "number" },
+        "basicSalary": { "type": "number" },
+        "houseRent": { "type": "number" },
+        "medicalAllowance": { "type": "number" },
+        "conveyanceAllowance": { "type": "number" },
+        "pfDeductionPercentage": { "type": "number" },
+        "taxDeduction": { "type": "number" }
+      },
+      "required": ["id", "fullName", "email", "designation", "department", "status"]
+    },
+    "Attendance": {
+      "title": "Attendance",
+      "description": "Daily punch and field work logs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "date": { "type": "string" },
+        "clockInTime": { "type": "string" },
+        "clockOutTime": { "type": "string" },
+        "workMode": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "employeeId", "date", "clockInTime", "status"]
+    },
+    "LeaveRequest": {
+      "title": "LeaveRequest",
+      "description": "Leave application with supervisor recommendation and HR approval",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "department": { "type": "string" },
+        "leaveType": { "type": "string" },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "daysCount": { "type": "number" },
+        "reason": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "employeeId", "leaveType", "startDate", "endDate", "status"]
+    },
+    "Payroll": {
+      "title": "Payroll",
+      "description": "Monthly salary record and payslip",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "monthKey": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "grossSalary": { "type": "number" },
+        "netSalary": { "type": "number" },
+        "paymentStatus": { "type": "string" }
+      },
+      "required": ["id", "monthKey", "employeeId", "netSalary", "paymentStatus"]
+    },
+    "Separation": {
+      "title": "Separation",
+      "description": "Staff separation, clearance, and final settlement record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "separationType": { "type": "string" },
+        "lastWorkingDate": { "type": "string" },
+        "reason": { "type": "string" },
+        "settlementAmount": { "type": "number" },
+        "clearanceStatus": { "type": "string" }
+      },
+      "required": ["id", "employeeId", "separationType", "lastWorkingDate", "clearanceStatus"]
+    }
+  },
+  "firestore": {
+    "/employees/{employeeId}": {
+      "schema": "Employee",
+      "description": "Master employee records"
+    },
+    "/attendance/{attendanceId}": {
+      "schema": "Attendance",
+      "description": "Daily attendance logs"
+    },
+    "/leaves/{leaveId}": {
+      "schema": "LeaveRequest",
+      "description": "Staff leave applications and supervisor recommendations"
+    },
+    "/payroll/{payrollId}": {
+      "schema": "Payroll",
+      "description": "Monthly payroll entries"
+    },
+    "/separations/{separationId}": {
+      "schema": "Separation",
+      "description": "Staff resignation, exit clearance and final settlement"
+    }
+  }
+}
