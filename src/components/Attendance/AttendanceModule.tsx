@@ -32,6 +32,7 @@ interface AttendanceModuleProps {
   onImportAttendanceRecords?: (records: AttendanceRecord[]) => void;
   currentUser: Employee;
   currentRole: UserRole;
+  jobLocations?: string[];
 }
 
 export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
@@ -42,13 +43,14 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
   onImportAttendanceRecords,
   currentUser,
   currentRole,
+  jobLocations = [...LEEDO_JOB_LOCATIONS],
 }) => {
   const todayStr = '2026-10-14'; // current app reference date
   const [selectedMode, setSelectedMode] = useState<WorkMode>('Office');
   const [selectedJobLocation, setSelectedJobLocation] = useState<string>(
-    currentUser.workStation && LEEDO_JOB_LOCATIONS.includes(currentUser.workStation as any)
+    currentUser.workStation && jobLocations.includes(currentUser.workStation as any)
       ? currentUser.workStation
-      : 'Head Office'
+      : jobLocations[0] || 'Head Office'
   );
   const [locationNote, setLocationNote] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -91,7 +93,8 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
       case 'Inclusive School': return { lat: 23.7745, lng: 90.3654 };
       case 'Kamalapur SUS':
       case 'Kamalapur Shelter': return { lat: 23.7314, lng: 90.4262 };
-      case 'Kodomtoli Shelter': return { lat: 23.6961, lng: 90.4533 };
+      case 'Kodomtoli Shelter':
+      case 'Kadamtali Vocational Center': return { lat: 23.6961, lng: 90.4533 };
       case 'Sadarghat SUS': return { lat: 23.7078, lng: 90.4109 };
       case 'Shambazar SUS': return { lat: 23.7095, lng: 90.4140 };
       case 'Mirpur SUS': return { lat: 23.8071, lng: 90.3686 };
@@ -357,18 +360,18 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
               </div>
             </div>
 
-            {/* LEEDO Job Location Selection (12 Master Locations) */}
+            {/* LEEDO Job Location Selection */}
             <div className="mt-3 space-y-1">
               <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
                 <span>LEEDO Job Location:</span>
-                <span className="text-[10px] text-slate-400 font-normal">12 Centers</span>
+                <span className="text-[10px] text-slate-400 font-normal">{jobLocations.length} Centers</span>
               </label>
               <select
                 value={selectedJobLocation}
                 onChange={(e) => setSelectedJobLocation(e.target.value)}
                 className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-hidden bg-slate-50 font-medium text-slate-800"
               >
-                {LEEDO_JOB_LOCATIONS.map((loc) => (
+                {jobLocations.map((loc) => (
                   <option key={loc} value={loc}>{loc}</option>
                 ))}
               </select>
@@ -543,8 +546,8 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
               onChange={(e) => setFilterLocation(e.target.value)}
               className="py-1.5 px-2.5 text-xs border border-slate-200 rounded-xl bg-white text-slate-700"
             >
-              <option value="All">All 12 Locations</option>
-              {LEEDO_JOB_LOCATIONS.map((loc) => (
+              <option value="All">All {jobLocations.length} Locations</option>
+              {jobLocations.map((loc) => (
                 <option key={loc} value={loc}>{loc}</option>
               ))}
             </select>

@@ -34,6 +34,7 @@ interface TimesheetModuleProps {
   currentUser: Employee;
   currentRole: UserRole;
   company?: CompanyProfile;
+  jobLocations?: string[];
   onAddTimesheet: (entry: TimesheetEntry) => void;
   onUpdateTimesheet: (entry: TimesheetEntry) => void;
 }
@@ -56,6 +57,7 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
   currentUser,
   currentRole,
   company,
+  jobLocations = [...LEEDO_JOB_LOCATIONS],
   onAddTimesheet,
   onUpdateTimesheet,
 }) => {
@@ -975,8 +977,8 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                     onChange={(e) => setMasterFilterStation(e.target.value)}
                     className="p-1.5 text-xs border border-slate-700 bg-slate-800 text-white rounded-lg"
                   >
-                    <option value="All">All 12 LEEDO Centers</option>
-                    {LEEDO_JOB_LOCATIONS.map((loc) => (
+                    <option value="All">All {jobLocations.length} LEEDO Centers</option>
+                    {jobLocations.map((loc) => (
                       <option key={loc} value={loc}>{loc}</option>
                     ))}
                   </select>

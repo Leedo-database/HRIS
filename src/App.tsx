@@ -14,7 +14,8 @@ import {
   UserRole,
   UserCredential,
   LetterType,
-  IssuedLetter
+  IssuedLetter,
+  LEEDO_JOB_LOCATIONS
 } from './types/hris';
 import { 
   INITIAL_COMPANY_PROFILE, 
@@ -72,6 +73,7 @@ import { CompanySettings } from './components/Settings/CompanySettings';
 import { LoginScreen } from './components/Auth/LoginScreen';
 import { MyProfileView } from './components/Profile/MyProfileView';
 import { LogoEditorModal } from './components/Settings/LogoEditorModal';
+import { JobLocationsManagerModal } from './components/Settings/JobLocationsManagerModal';
 import { Menu } from 'lucide-react';
 
 export default function App() {
@@ -130,6 +132,59 @@ export default function App() {
   const [company, setCompany] = useState<CompanyProfile>(() =>
     loadFromStorage(STORAGE_KEYS.COMPANY, INITIAL_COMPANY_PROFILE)
   );
+
+  // LEEDO Job Locations & Centers Master State
+  const [jobLocations, setJobLocations] = useState<string[]>(() => {
+    const saved = loadFromStorage<string[]>(STORAGE_KEYS.JOB_LOCATIONS, [...LEEDO_JOB_LOCATIONS]);
+    // Ensure "Kadamtali Vocational Center" is guaranteed to be present in the job location list
+    if (!saved.includes('Kadamtali Vocational Center')) {
+      const idx = saved.indexOf('Kodomtoli Shelter');
+      const updated = [...saved];
+      if (idx !== -1) {
+        updated.splice(idx + 1, 0, 'Kadamtali Vocational Center');
+      } else {
+        updated.push('Kadamtali Vocational Center');
+      }
+      saveToStorage(STORAGE_KEYS.JOB_LOCATIONS, updated);
+      return updated;
+    }
+    return saved;
+  });
+
+  const [isJobLocationsModalOpen, setIsJobLocationsModalOpen] = useState(false);
+
+  // HR Admin: Update or rename official job location names with automatic cascade
+  const handleUpdateJobLocations = (newLocations: string[], oldName?: string, newName?: string) => {
+    setJobLocations(newLocations);
+    saveToStorage(STORAGE_KEYS.JOB_LOCATIONS, newLocations);
+
+    // If a location is renamed, cascade the new name to all employee profiles and cloud sync
+    if (oldName && newName && oldName !== newName) {
+      setEmployees((prev) => {
+        const updated = prev.map((emp) => {
+          let changed = false;
+          let newWorkStation = emp.workStation;
+          if (emp.workStation === oldName) {
+            newWorkStation = newName;
+            changed = true;
+          }
+          let newJobLocations = emp.jobLocations;
+          if (emp.jobLocations && emp.jobLocations.includes(oldName as any)) {
+            newJobLocations = emp.jobLocations.map((loc) => (loc === oldName ? (newName as any) : loc));
+            changed = true;
+          }
+          if (changed) {
+            const updatedEmp = { ...emp, workStation: newWorkStation, jobLocations: newJobLocations };
+            saveEmployeeToCloud(updatedEmp);
+            return updatedEmp;
+          }
+          return emp;
+        });
+        saveToStorage(STORAGE_KEYS.EMPLOYEES, updated);
+        return updated;
+      });
+    }
+  };
 
   // User credentials map (employeeId -> UserCredential)
   const [credentials, setCredentials] = useState<Record<string, UserCredential>>(() => {
@@ -619,6 +674,8 @@ export default function App() {
                   company={company}
                   currentRole={currentRole}
                   currentUser={currentUser}
+                  jobLocations={jobLocations}
+                  onOpenJobLocationsManager={() => setIsJobLocationsModalOpen(true)}
                   onSelectEmployee={(emp) => setSelectedEmployeeForDetail(emp)}
                   onAddEmployee={() => {
                     setEmployeeToEdit(null);
@@ -653,6 +710,7 @@ export default function App() {
                 attendance={attendance}
                 currentUser={currentUser}
                 currentRole={currentRole}
+                jobLocations={jobLocations}
                 onAddAttendance={handleAddAttendance}
                 onUpdateAttendance={handleUpdateAttendance}
               />
@@ -664,6 +722,7 @@ export default function App() {
                 employees={employees}
                 currentUser={currentUser}
                 currentRole={currentRole}
+                jobLocations={jobLocations}
                 onAddTimesheet={(t) => {
                   const updated = [t, ...timesheets];
                   setTimesheets(updated);
@@ -815,6 +874,9 @@ export default function App() {
                   saveToStorage(STORAGE_KEYS.COMPANY, c);
                 }}
                 onResetData={handleResetData}
+                jobLocations={jobLocations}
+                employees={employees}
+                onUpdateJobLocations={handleUpdateJobLocations}
               />
             )}
           </div>
@@ -859,6 +921,7 @@ export default function App() {
         employeeToEdit={employeeToEdit}
         existingCount={employees.length}
         employees={employees}
+        jobLocations={jobLocations}
       />
 
       {/* Organization Logo Customizer Modal (HR Admin) */}
@@ -868,6 +931,15 @@ export default function App() {
         currentLogoUrl={company.logoUrl || '/leedo-logo.svg'}
         onSaveLogo={handleSaveLogo}
         organizationName={company.name}
+      />
+
+      {/* Job Locations & Centers Management Modal (HR Admin) */}
+      <JobLocationsManagerModal
+        isOpen={isJobLocationsModalOpen}
+        onClose={() => setIsJobLocationsModalOpen(false)}
+        jobLocations={jobLocations}
+        employees={employees}
+        onUpdateJobLocations={handleUpdateJobLocations}
       />
     </div>
   );

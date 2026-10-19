@@ -23,6 +23,7 @@ interface AddEmployeeModalProps {
   employeeToEdit?: Employee | null;
   existingCount: number;
   employees?: Employee[];
+  jobLocations?: string[];
 }
 
 const ALL_DAYS = [
@@ -42,6 +43,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
   employeeToEdit,
   existingCount,
   employees = [],
+  jobLocations = [...LEEDO_JOB_LOCATIONS],
 }) => {
   const [formData, setFormData] = useState<Partial<Employee>>({});
   const [activeTab, setActiveTab] = useState<'basic' | 'duty_schedule' | 'salary' | 'locations' | 'compliance'>('basic');
@@ -890,7 +892,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
             </div>
           )}
 
-          {/* TAB 4: 12 LEEDO JOB LOCATIONS (Multiple Select) */}
+          {/* TAB 4: 13 LEEDO JOB LOCATIONS (Multiple Select) */}
           {activeTab === 'locations' && (
             <div className="space-y-4">
               <div className="p-4 bg-indigo-50/70 border border-indigo-100 rounded-2xl">
@@ -903,7 +905,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {LEEDO_JOB_LOCATIONS.map((loc) => {
+                {jobLocations.map((loc) => {
                   const isSelected = (formData.jobLocations || []).includes(loc);
                   return (
                     <button

@@ -37,6 +37,7 @@ export const LEEDO_JOB_LOCATIONS = [
   'Kamalapur SUS',
   'Kamalapur Shelter',
   'Kodomtoli Shelter',
+  'Kadamtali Vocational Center',
   'Sadarghat SUS',
   'Shambazar SUS',
   'Mirpur SUS',

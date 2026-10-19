@@ -27,6 +27,8 @@ interface EmployeeDirectoryProps {
   company: CompanyProfile;
   currentRole: UserRole;
   currentUser?: Employee;
+  jobLocations?: string[];
+  onOpenJobLocationsManager?: () => void;
   onSelectEmployee: (emp: Employee) => void;
   onAddEmployee: () => void;
   onEditEmployee: (emp: Employee) => void;
@@ -39,6 +41,8 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
   company,
   currentRole,
   currentUser,
+  jobLocations = [...LEEDO_JOB_LOCATIONS],
+  onOpenJobLocationsManager,
   onSelectEmployee,
   onAddEmployee,
   onEditEmployee,
@@ -169,19 +173,33 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
           <p className="text-xs text-slate-500 mt-0.5">
             {currentRole === 'line_manager'
               ? `Displaying ${filtered.length} staff members reporting directly under your supervision`
-              : `Active roster of ${filtered.length} official staff members across 12 LEEDO centers and field shelters`}
+              : `Active roster of ${filtered.length} official staff members across ${jobLocations.length} LEEDO centers and field shelters`}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           {currentRole === 'hr_admin' && (
-            <button
-              onClick={onAddEmployee}
-              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-md shadow-indigo-200 cursor-pointer"
-            >
-              <UserPlus className="w-4 h-4" />
-              <span>Onboard New Employee</span>
-            </button>
+            <>
+              <button
+                onClick={onAddEmployee}
+                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-md shadow-indigo-200 cursor-pointer"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>Onboard New Employee</span>
+              </button>
+
+              {onOpenJobLocationsManager && (
+                <button
+                  type="button"
+                  onClick={onOpenJobLocationsManager}
+                  className="flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold px-3 py-2.5 rounded-xl border border-indigo-200 transition-colors shadow-2xs cursor-pointer"
+                  title="HR Admin: Manage, rename, or add Job Locations & Centers"
+                >
+                  <MapPin className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Job Locations ({jobLocations.length})</span>
+                </button>
+              )}
+            </>
           )}
 
           <button
@@ -245,18 +263,28 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
             </select>
           </div>
 
-          {/* Job Location filter (12 LEEDO Centers) */}
-          <div>
+          {/* Job Location filter */}
+          <div className="flex items-center gap-1.5">
             <select
               value={selectedLocation}
               onChange={(e) => setSelectedLocation(e.target.value)}
               className="w-full py-2 px-3 text-xs border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden text-slate-700 font-medium"
             >
-              <option value="All">All 12 Job Locations</option>
-              {LEEDO_JOB_LOCATIONS.map((loc) => (
+              <option value="All">All {jobLocations.length} Job Locations</option>
+              {jobLocations.map((loc) => (
                 <option key={loc} value={loc}>{loc}</option>
               ))}
             </select>
+            {currentRole === 'hr_admin' && onOpenJobLocationsManager && (
+              <button
+                type="button"
+                onClick={onOpenJobLocationsManager}
+                title="Edit / Rename Job Locations"
+                className="p-2 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-xl border border-indigo-200 cursor-pointer shrink-0 transition-colors"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
           {/* Supervisor filter */}

@@ -19,6 +19,7 @@ export const STORAGE_KEYS = {
   CREDENTIALS: 'prohris_credentials_v2',
   AUTH_SESSION: 'prohris_auth_session_v2',
   MIGRATION_VERSION: 'prohris_migration_version_v5_0',
+  JOB_LOCATIONS: 'prohris_job_locations_v2',
 };
 
 export const VALID_LEEDO_ID_MAP = new Map<string, string>(
