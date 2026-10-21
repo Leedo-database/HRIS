@@ -16,6 +16,7 @@ import {
   ArrowRight,
   Printer
 } from 'lucide-react';
+import { isEmployeeActive } from '../../utils/calculations';
 
 interface LeaveModuleProps {
   leaves: LeaveRequest[];
@@ -47,8 +48,8 @@ export const LeaveModule: React.FC<LeaveModuleProps> = ({
   const [endDate, setEndDate] = useState('2026-10-20');
   const [reason, setReason] = useState('');
   
-  // Handover Colleague with ID and Name
-  const colleagues = employees.filter((e) => e.id !== currentUser.id);
+  // Handover Colleague with ID and Name (Active staff only)
+  const colleagues = employees.filter((e) => e.id !== currentUser.id && isEmployeeActive(e));
   const [handoverPersonId, setHandoverPersonId] = useState<string>(colleagues[0]?.id || '');
 
   const currentBalance: LeaveBalance = leaveBalances[currentUser.id] || {

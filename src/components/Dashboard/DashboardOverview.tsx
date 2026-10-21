@@ -23,7 +23,8 @@ import {
   getGenderDistribution, 
   getDepartmentDistribution, 
   getUpcomingMilestones,
-  getTodayAttendanceSummary 
+  getTodayAttendanceSummary,
+  isEmployeeActive 
 } from '../../utils/calculations';
 import { NavTab } from '../Sidebar';
 
@@ -54,7 +55,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   onOpenAddEmployee,
   onOpenLetterGenerator,
 }) => {
-  const activeEmployees = employees.filter((e) => e.status !== 'Terminated');
+  const activeEmployees = employees.filter(isEmployeeActive);
   const todaySummary = getTodayAttendanceSummary(employees, attendance);
   const genderStats = getGenderDistribution(employees);
   const deptStats = getDepartmentDistribution(employees);
@@ -63,9 +64,9 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   const pendingLeaves = leaves.filter((l) => l.status === 'Pending').length;
   const pendingTimesheets = timesheets.filter((t) => t.status === 'Submitted').length;
 
-  // Turnover rate calculation: (Terminated in year / Avg headcount) * 100
-  const terminatedCount = employees.filter((e) => e.status === 'Terminated').length;
-  const turnoverRate = Math.round((terminatedCount / (employees.length || 1)) * 100);
+  // Turnover rate calculation: (Separated in year / Total personnel recorded) * 100
+  const separatedCount = employees.filter((e) => !isEmployeeActive(e)).length;
+  const turnoverRate = Math.round((separatedCount / (employees.length || 1)) * 100);
 
   return (
     <div className="space-y-6">

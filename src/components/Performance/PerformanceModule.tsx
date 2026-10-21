@@ -18,6 +18,7 @@ import {
   ChevronRight,
   X
 } from 'lucide-react';
+import { isEmployeeActive } from '../../utils/calculations';
 
 interface PerformanceModuleProps {
   appraisals: PerformanceAppraisal[];
@@ -68,9 +69,10 @@ export const PerformanceModule: React.FC<PerformanceModuleProps> = ({
 
   // Form state for conducting new appraisal (Supervisor & HR)
   const [isCreating, setIsCreating] = useState(false);
-  const eligibleStaff = currentRole === 'line_manager'
+  const eligibleStaff = (currentRole === 'line_manager'
     ? employees.filter((e) => subordinateIds.has(e.id))
-    : employees;
+    : employees
+  ).filter(isEmployeeActive);
 
   const [selectedStaffId, setSelectedStaffId] = useState(eligibleStaff[0]?.id || employees[0]?.id || '');
   const [cycle, setCycle] = useState('Annual Performance Review 2026');

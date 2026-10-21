@@ -486,7 +486,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
               <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
                 <span className="text-[11px] text-slate-600 font-bold block">Overall Turnout</span>
                 <p className="text-2xl font-bold text-slate-900 mt-1">{todaySummary.attendanceRate}%</p>
-                <span className="text-[10px] text-slate-500 block mt-0.5">{employees.length - todaySummary.absentCount}/{employees.length} Staff</span>
+                <span className="text-[10px] text-slate-500 block mt-0.5">{todaySummary.totalEmployees - todaySummary.absentCount}/{todaySummary.totalEmployees} Active Staff</span>
               </div>
             </div>
           </div>

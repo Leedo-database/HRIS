@@ -19,7 +19,7 @@ import {
   ShieldCheck,
   Briefcase
 } from 'lucide-react';
-import { formatCurrency, numberToWords } from '../../utils/calculations';
+import { formatCurrency, numberToWords, isEmployeeActive } from '../../utils/calculations';
 
 interface OfficialLettersModuleProps {
   employees: Employee[];
@@ -368,11 +368,22 @@ export const OfficialLettersModule: React.FC<OfficialLettersModuleProps> = ({
                   onChange={(e) => setSelectedStaffId(e.target.value)}
                   className="w-full p-2 border border-slate-200 rounded-xl bg-white font-medium"
                 >
-                  {employees.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      [{e.id}] {e.fullName} — {e.designation}
-                    </option>
-                  ))}
+                  <optgroup label="Active Employees (বর্তমান কর্মী)">
+                    {employees.filter(isEmployeeActive).map((e) => (
+                      <option key={e.id} value={e.id}>
+                        [{e.id}] {e.fullName} — {e.designation}
+                      </option>
+                    ))}
+                  </optgroup>
+                  {employees.some((e) => !isEmployeeActive(e)) && (
+                    <optgroup label="Separated / Ex-Staff (অব্যাহতিপ্রাপ্ত কর্মী - Experience & Release Letters)">
+                      {employees.filter((e) => !isEmployeeActive(e)).map((e) => (
+                        <option key={e.id} value={e.id}>
+                          [{e.id}] {e.fullName} (Exited) — {e.designation}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               </div>
 

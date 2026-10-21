@@ -20,7 +20,7 @@ import {
   Clock,
   Sparkles
 } from 'lucide-react';
-import { formatCurrency } from '../../utils/calculations';
+import { formatCurrency, isEmployeeActive } from '../../utils/calculations';
 
 interface EmployeeDirectoryProps {
   employees: Employee[];
@@ -56,16 +56,26 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
   const [selectedSupervisor, setSelectedSupervisor] = useState('All');
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
 
-  const departments = ['All', ...Array.from(new Set(employees.map((e) => e.department).filter(Boolean)))];
+  // Active employees list
+  const activeEmployees = employees.filter(isEmployeeActive);
+  const departments = ['All', ...Array.from(new Set(activeEmployees.map((e) => e.department).filter(Boolean)))];
   
-  // Supervisors list for filtering
+  // Supervisors list for filtering: ONLY list supervisors of currently active employees, excluding any supervisors who resigned/separated
   const supervisors = Array.from(
     new Set(
-      employees
+      activeEmployees
         .map((e) => e.reportingManagerName)
         .filter((name): name is string => Boolean(name))
     )
-  );
+  ).filter((supName) => {
+    const supEmp = employees.find(
+      (e) => e.fullName.trim().toLowerCase() === supName.trim().toLowerCase()
+    );
+    if (supEmp && !isEmployeeActive(supEmp)) {
+      return false;
+    }
+    return true;
+  });
 
   const filtered = employees.filter((emp) => {
     // For line_manager (supervisor), ONLY show subordinates assigned to this supervisor
@@ -78,11 +88,17 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
     }
 
     const q = searchQuery.toLowerCase().trim();
-    const isExited = emp.status === 'Separated' || emp.status === 'Terminated';
+    const isExited = !isEmployeeActive(emp);
 
-    // Staff who have left are hidden from master directory by default, but appear immediately when searched by ID or name
-    if (!q && isExited) {
-      return false;
+    // If viewing separated staff, show them. Otherwise exclude separated/resigned staff unless specifically searched by ID/name
+    if (selectedStatus === 'Terminated' || selectedStatus === 'Separated') {
+      if (!isExited) return false;
+    } else if (selectedStatus === 'All') {
+      if (!q && isExited) {
+        return false;
+      }
+    } else {
+      if (isExited) return false;
     }
 
     const matchesSearch =
@@ -95,7 +111,12 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
       emp.email.toLowerCase().includes(q);
 
     const matchesDept = selectedDept === 'All' || emp.department === selectedDept;
-    const matchesStatus = selectedStatus === 'All' || emp.status === selectedStatus;
+    const matchesStatus =
+      selectedStatus === 'All'
+        ? true
+        : selectedStatus === 'Terminated' || selectedStatus === 'Separated'
+        ? isExited
+        : emp.status === selectedStatus;
     
     // Check assigned locations
     const matchesLocation = selectedLocation === 'All' || 
@@ -308,18 +329,23 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
               onChange={(e) => setSelectedStatus(e.target.value)}
               className="w-full py-2 px-3 text-xs border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden text-slate-700 font-medium"
             >
-              <option value="All">All Statuses</option>
-              <option value="Active">Active</option>
-              <option value="Probation">Probation</option>
-              <option value="Contractual">Contractual</option>
+              <option value="All">All Active Staff</option>
+              <option value="Active">Active Regular</option>
+              <option value="Probation">Probationary Staff</option>
+              <option value="Contractual">Contractual / Project Staff</option>
               <option value="On Leave">On Leave</option>
-              <option value="Terminated">Separated / Terminated</option>
+              <option value="Terminated">Separated / Resigned Staff (Archive)</option>
             </select>
           </div>
         </div>
 
         <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
-          <span>Showing <strong>{filtered.length}</strong> of {employees.length} personnel</span>
+          <span>
+            Showing <strong>{filtered.length}</strong>{' '}
+            {selectedStatus === 'Terminated' || selectedStatus === 'Separated'
+              ? `separated/resigned records (out of ${employees.length - activeEmployees.length} exited records)`
+              : `active personnel (out of ${activeEmployees.length} active staff)`}
+          </span>
           {(searchQuery || selectedDept !== 'All' || selectedStatus !== 'All' || selectedLocation !== 'All' || selectedSupervisor !== 'All') && (
             <button
               onClick={() => {

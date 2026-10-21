@@ -17,7 +17,8 @@ import {
   getDepartmentDistribution, 
   getProjectDistribution,
   getTodayAttendanceSummary,
-  formatCurrency 
+  formatCurrency,
+  isEmployeeActive 
 } from '../../utils/calculations';
 
 interface ReportsModuleProps {
@@ -35,7 +36,7 @@ export const ReportsModule: React.FC<ReportsModuleProps> = ({
   separations,
   company,
 }) => {
-  const activeStaff = employees.filter((e) => e.status !== 'Terminated' && e.status !== 'Separated');
+  const activeStaff = employees.filter(isEmployeeActive);
   const genderStats = getGenderDistribution(employees);
   const deptStats = getDepartmentDistribution(employees);
   const projectStats = getProjectDistribution(employees);

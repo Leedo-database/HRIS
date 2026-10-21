@@ -14,7 +14,7 @@ import {
   Calculator,
   AlertTriangle
 } from 'lucide-react';
-import { calculateDailyHours, calculateLeaveQuotas, formatCurrency } from '../../utils/calculations';
+import { calculateDailyHours, calculateLeaveQuotas, formatCurrency, isEmployeeActive } from '../../utils/calculations';
 
 interface AddEmployeeModalProps {
   isOpen: boolean;
@@ -480,8 +480,17 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   className="w-full p-2.5 border border-indigo-200 rounded-xl bg-white text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="">-- No Direct Line Supervisor (Reports to Founder/ED) --</option>
+                  {/* If previously assigned supervisor has resigned/separated, display with tag */}
+                  {formData.reportingManagerId &&
+                    !employees
+                      .filter((e) => e.id !== formData.id && isEmployeeActive(e))
+                      .some((e) => e.id === formData.reportingManagerId) && (
+                      <option value={formData.reportingManagerId}>
+                        ⚠️ [Inactive/Separated: {formData.reportingManagerName || formData.reportingManagerId}] — Reassign to an active supervisor
+                      </option>
+                    )}
                   {employees
-                    .filter((e) => e.id !== formData.id)
+                    .filter((e) => e.id !== formData.id && isEmployeeActive(e))
                     .map((emp) => (
                       <option key={emp.id} value={emp.id}>
                         [{emp.id}] {emp.fullName} • {emp.designation} ({emp.department})

@@ -28,8 +28,34 @@ export function numberToWords(num: number): string {
   return `${inWords(integerPart)} Taka Only`;
 }
 
+/**
+ * Checks if an employee is currently active (excludes Separated, Terminated, Resigned, Inactive, Left, or with separationDate).
+ */
+export function isEmployeeActive(emp: Employee | null | undefined): boolean {
+  if (!emp) return false;
+  const s = (emp.status || '').toLowerCase().trim();
+  if (
+    s === 'separated' ||
+    s === 'terminated' ||
+    s === 'resigned' ||
+    s === 'inactive' ||
+    s === 'left' ||
+    s === 'discharged'
+  ) {
+    return false;
+  }
+  if (emp.separationDate && String(emp.separationDate).trim() !== '') {
+    return false;
+  }
+  return true;
+}
+
+export function isEmployeeSeparated(emp: Employee | null | undefined): boolean {
+  return !isEmployeeActive(emp);
+}
+
 export function getGenderDistribution(employees: Employee[]) {
-  const active = employees.filter((e) => e.status !== 'Terminated');
+  const active = employees.filter(isEmployeeActive);
   const total = active.length || 1;
   const female = active.filter((e) => e.gender === 'Female').length;
   const male = active.filter((e) => e.gender === 'Male').length;
@@ -47,7 +73,7 @@ export function getGenderDistribution(employees: Employee[]) {
 }
 
 export function getDepartmentDistribution(employees: Employee[]) {
-  const active = employees.filter((e) => e.status !== 'Terminated');
+  const active = employees.filter(isEmployeeActive);
   const counts: Record<string, number> = {};
   active.forEach((e) => {
     counts[e.department] = (counts[e.department] || 0) + 1;
@@ -56,7 +82,7 @@ export function getDepartmentDistribution(employees: Employee[]) {
 }
 
 export function getProjectDistribution(employees: Employee[]) {
-  const active = employees.filter((e) => e.status !== 'Terminated');
+  const active = employees.filter(isEmployeeActive);
   const counts: Record<string, number> = {};
   active.forEach((e) => {
     const proj = e.assignedProject || 'General / Core';
@@ -81,7 +107,7 @@ export function getUpcomingMilestones(employees: Employee[], referenceDate: Date
   const milestones: UpcomingMilestone[] = [];
   const currentMonth = referenceDate.getMonth(); // 0-indexed (9 is October)
 
-  employees.filter((e) => e.status !== 'Terminated').forEach((emp) => {
+  employees.filter(isEmployeeActive).forEach((emp) => {
     // 1. Birthdays in current & next month
     if (emp.dob) {
       const dobDate = new Date(emp.dob);
@@ -171,7 +197,7 @@ export function getUpcomingMilestones(employees: Employee[], referenceDate: Date
 }
 
 export function getTodayAttendanceSummary(employees: Employee[], attendance: AttendanceRecord[], todayStr: string = '2026-10-13') {
-  const activeStaff = employees.filter((e) => e.status !== 'Terminated');
+  const activeStaff = employees.filter(isEmployeeActive);
   const todayPunches = attendance.filter((a) => a.date === todayStr);
 
   const presentCount = todayPunches.filter((a) => a.status === 'Present').length;

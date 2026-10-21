@@ -12,7 +12,7 @@ import {
   AlertTriangle,
   X
 } from 'lucide-react';
-import { formatCurrency, numberToWords } from '../../utils/calculations';
+import { formatCurrency, numberToWords, isEmployeeActive } from '../../utils/calculations';
 
 interface SeparationModuleProps {
   separations: SeparationRecord[];
@@ -175,11 +175,13 @@ export const SeparationModule: React.FC<SeparationModuleProps> = ({
                   onChange={(e) => setSelectedStaffId(e.target.value)}
                   className="w-full p-2 border border-slate-200 rounded-xl bg-white"
                 >
-                  {employees.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.fullName} ({emp.id}) — {emp.designation}
-                    </option>
-                  ))}
+                  {employees
+                    .filter((emp) => isEmployeeActive(emp) || emp.id === selectedStaffId)
+                    .map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.fullName} ({emp.id}) — {emp.designation} {!isEmployeeActive(emp) ? '(Separated)' : ''}
+                      </option>
+                    ))}
                 </select>
               </div>
 
