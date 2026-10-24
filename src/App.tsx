@@ -41,15 +41,26 @@ import {
 } from './utils/storage';
 import { 
   fetchEmployeesFromCloud, 
+  subscribeEmployeesFromCloud,
   saveEmployeeToCloud,
+  fetchTimesheetsFromCloud,
+  subscribeTimesheetsFromCloud,
+  saveTimesheetToCloud,
+  deleteTimesheetFromCloud,
   fetchLeavesFromCloud,
+  subscribeLeavesFromCloud,
   saveLeaveToCloud,
   fetchAttendanceFromCloud,
+  subscribeAttendanceFromCloud,
   saveAttendanceToCloud,
   fetchSeparationsFromCloud,
+  subscribeSeparationsFromCloud,
   saveSeparationToCloud,
   fetchVisitsFromCloud,
+  subscribeVisitsFromCloud,
   saveVisitToCloud,
+  fetchCompanyConfigFromCloud,
+  saveCompanyConfigToCloud,
   testFirestoreConnection
 } from './utils/firebaseSync';
 
@@ -153,10 +164,13 @@ export default function App() {
 
   const [isJobLocationsModalOpen, setIsJobLocationsModalOpen] = useState(false);
 
+  const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'offline'>('synced');
+
   // HR Admin: Update or rename official job location names with automatic cascade
   const handleUpdateJobLocations = (newLocations: string[], oldName?: string, newName?: string) => {
     setJobLocations(newLocations);
     saveToStorage(STORAGE_KEYS.JOB_LOCATIONS, newLocations);
+    saveCompanyConfigToCloud(company, newLocations);
 
     // If a location is renamed, cascade the new name to all employee profiles and cloud sync
     if (oldName && newName && oldName !== newName) {
@@ -240,39 +254,112 @@ export default function App() {
   // Separation state
   const [separationInitialStaffId, setSeparationInitialStaffId] = useState<string | null>(null);
 
-  // Initial Cloud Sync with Firestore
+  // Initial Automated Cloud Sync with Firestore
   useEffect(() => {
-    testFirestoreConnection();
-    fetchEmployeesFromCloud().then((cloudEmps) => {
+    let isMounted = true;
+    setSyncStatus('syncing');
+
+    testFirestoreConnection().then((connected) => {
+      if (!isMounted) return;
+      setSyncStatus(connected ? 'synced' : 'offline');
+    });
+
+    // 1. Live subscribe to Employees & Staff Roster
+    const unsubEmps = subscribeEmployeesFromCloud((cloudEmps) => {
+      if (!isMounted) return;
       if (cloudEmps && cloudEmps.length > 0) {
+        setEmployees(cloudEmps);
+        saveToStorage(STORAGE_KEYS.EMPLOYEES, cloudEmps);
+        setSyncStatus('synced');
+      }
+    });
+
+    // 2. Live subscribe to Staff Roster & Project Timesheets
+    const unsubTimesheets = subscribeTimesheetsFromCloud((cloudTs) => {
+      if (!isMounted) return;
+      if (cloudTs && cloudTs.length > 0) {
+        setTimesheets(cloudTs);
+        saveToStorage(STORAGE_KEYS.TIMESHEETS, cloudTs);
+        setSyncStatus('synced');
+      }
+    });
+
+    // 3. Live subscribe to Daily Attendance
+    const unsubAttendance = subscribeAttendanceFromCloud((cloudAtt) => {
+      if (!isMounted) return;
+      if (cloudAtt && cloudAtt.length > 0) {
+        setAttendance(cloudAtt);
+        saveToStorage(STORAGE_KEYS.ATTENDANCE, cloudAtt);
+        setSyncStatus('synced');
+      }
+    });
+
+    // 4. Live subscribe to Leave Applications
+    const unsubLeaves = subscribeLeavesFromCloud((cloudLeaves) => {
+      if (!isMounted) return;
+      if (cloudLeaves && cloudLeaves.length > 0) {
+        setLeaves(cloudLeaves);
+        saveToStorage(STORAGE_KEYS.LEAVES, cloudLeaves);
+        setSyncStatus('synced');
+      }
+    });
+
+    // 5. Live subscribe to Staff Separations
+    const unsubSeparations = subscribeSeparationsFromCloud((cloudSeps) => {
+      if (!isMounted) return;
+      if (cloudSeps && cloudSeps.length > 0) {
+        setSeparations(cloudSeps);
+        saveToStorage(STORAGE_KEYS.SEPARATIONS, cloudSeps);
+        setSyncStatus('synced');
+      }
+    });
+
+    // 6. Live subscribe to Visits
+    const unsubVisits = subscribeVisitsFromCloud((cloudVisits) => {
+      if (!isMounted) return;
+      if (cloudVisits && cloudVisits.length > 0) {
+        setVisits(cloudVisits);
+        saveToStorage(STORAGE_KEYS.VISITS, cloudVisits);
+        setSyncStatus('synced');
+      }
+    });
+
+    // 7. Load Organization Profile & Job Locations
+    fetchCompanyConfigFromCloud().then((config) => {
+      if (!isMounted || !config) return;
+      if (config.company) {
+        setCompany(config.company);
+        saveToStorage(STORAGE_KEYS.COMPANY, config.company);
+      }
+      if (config.jobLocations && config.jobLocations.length > 0) {
+        setJobLocations(config.jobLocations);
+        saveToStorage(STORAGE_KEYS.JOB_LOCATIONS, config.jobLocations);
+      }
+    });
+
+    // Fallback immediate fetches to populate quickly
+    fetchEmployeesFromCloud().then((cloudEmps) => {
+      if (isMounted && cloudEmps && cloudEmps.length > 0) {
         setEmployees(cloudEmps);
         saveToStorage(STORAGE_KEYS.EMPLOYEES, cloudEmps);
       }
     });
-    fetchLeavesFromCloud().then((cloudLeaves) => {
-      if (cloudLeaves && cloudLeaves.length > 0) {
-        setLeaves(cloudLeaves);
-        saveToStorage(STORAGE_KEYS.LEAVES, cloudLeaves);
+    fetchTimesheetsFromCloud().then((cloudTs) => {
+      if (isMounted && cloudTs && cloudTs.length > 0) {
+        setTimesheets(cloudTs);
+        saveToStorage(STORAGE_KEYS.TIMESHEETS, cloudTs);
       }
     });
-    fetchAttendanceFromCloud().then((cloudAtt) => {
-      if (cloudAtt && cloudAtt.length > 0) {
-        setAttendance(cloudAtt);
-        saveToStorage(STORAGE_KEYS.ATTENDANCE, cloudAtt);
-      }
-    });
-    fetchSeparationsFromCloud().then((cloudSeps) => {
-      if (cloudSeps && cloudSeps.length > 0) {
-        setSeparations(cloudSeps);
-        saveToStorage(STORAGE_KEYS.SEPARATIONS, cloudSeps);
-      }
-    });
-    fetchVisitsFromCloud().then((cloudVisits) => {
-      if (cloudVisits && cloudVisits.length > 0) {
-        setVisits(cloudVisits);
-        saveToStorage(STORAGE_KEYS.VISITS, cloudVisits);
-      }
-    });
+
+    return () => {
+      isMounted = false;
+      unsubEmps();
+      unsubTimesheets();
+      unsubAttendance();
+      unsubLeaves();
+      unsubSeparations();
+      unsubVisits();
+    };
   }, []);
 
   // Save changes to localStorage & Cloud
@@ -297,7 +384,10 @@ export default function App() {
     }
     setEmployees(updated);
     saveToStorage(STORAGE_KEYS.EMPLOYEES, updated);
-    saveEmployeeToCloud(emp);
+    setSyncStatus('syncing');
+    saveEmployeeToCloud(emp)
+      .then(() => setSyncStatus('synced'))
+      .catch(() => setSyncStatus('offline'));
 
     // If updated employee is the active user, update currentUser state
     if (currentUser.id === emp.id) {
@@ -363,6 +453,27 @@ export default function App() {
     const updatedCompany = { ...company, logoUrl: newLogoUrl };
     setCompany(updatedCompany);
     saveToStorage(STORAGE_KEYS.COMPANY, updatedCompany);
+    saveCompanyConfigToCloud(updatedCompany, jobLocations);
+  };
+
+  const handleAddTimesheet = (t: TimesheetEntry) => {
+    const updated = [t, ...timesheets.filter((item) => item.id !== t.id)];
+    setTimesheets(updated);
+    saveToStorage(STORAGE_KEYS.TIMESHEETS, updated);
+    setSyncStatus('syncing');
+    saveTimesheetToCloud(t)
+      .then(() => setSyncStatus('synced'))
+      .catch(() => setSyncStatus('offline'));
+  };
+
+  const handleUpdateTimesheet = (t: TimesheetEntry) => {
+    const updated = timesheets.map((item) => (item.id === t.id ? t : item));
+    setTimesheets(updated);
+    saveToStorage(STORAGE_KEYS.TIMESHEETS, updated);
+    setSyncStatus('syncing');
+    saveTimesheetToCloud(t)
+      .then(() => setSyncStatus('synced'))
+      .catch(() => setSyncStatus('offline'));
   };
 
   const handleSaveIssuedLetter = (letter: IssuedLetter) => {
@@ -605,6 +716,7 @@ export default function App() {
         onOpenMyProfile={() => setActiveTab('profile')}
         onLogout={handleLogout}
         pendingApprovalsCount={pendingLeavesCount + pendingVisitsCount + pendingTimesheetsCount + pendingExpensesCount}
+        syncStatus={syncStatus}
       />
 
       <div className="flex-1 flex overflow-hidden">
@@ -723,16 +835,8 @@ export default function App() {
                 currentUser={currentUser}
                 currentRole={currentRole}
                 jobLocations={jobLocations}
-                onAddTimesheet={(t) => {
-                  const updated = [t, ...timesheets];
-                  setTimesheets(updated);
-                  saveToStorage(STORAGE_KEYS.TIMESHEETS, updated);
-                }}
-                onUpdateTimesheet={(t) => {
-                  const updated = timesheets.map((item) => (item.id === t.id ? t : item));
-                  setTimesheets(updated);
-                  saveToStorage(STORAGE_KEYS.TIMESHEETS, updated);
-                }}
+                onAddTimesheet={handleAddTimesheet}
+                onUpdateTimesheet={handleUpdateTimesheet}
               />
             )}
 
@@ -911,18 +1015,20 @@ export default function App() {
       )}
 
       {/* Add / Edit Employee Modal (HR Admin only) */}
-      <AddEmployeeModal
-        isOpen={isAddEmployeeOpen}
-        onClose={() => {
-          setIsAddEmployeeOpen(false);
-          setEmployeeToEdit(null);
-        }}
-        onSave={handleSaveEmployee}
-        employeeToEdit={employeeToEdit}
-        existingCount={employees.length}
-        employees={employees}
-        jobLocations={jobLocations}
-      />
+      {isAddEmployeeOpen && (
+        <AddEmployeeModal
+          isOpen={isAddEmployeeOpen}
+          onClose={() => {
+            setIsAddEmployeeOpen(false);
+            setEmployeeToEdit(null);
+          }}
+          onSave={handleSaveEmployee}
+          employeeToEdit={employeeToEdit}
+          existingCount={employees.length}
+          employees={employees}
+          jobLocations={jobLocations}
+        />
+      )}
 
       {/* Organization Logo Customizer Modal (HR Admin) */}
       <LogoEditorModal

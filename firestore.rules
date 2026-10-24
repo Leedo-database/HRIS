@@ -2,7 +2,7 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Master Employee Database
+    // Master Employee & Duty Roster Database
     match /employees/{employeeId} {
       allow read, write: if true;
     }
@@ -17,8 +17,13 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // Project Timesheets
+    // Staff Roster & Project Timesheets
     match /timesheets/{timesheetId} {
+      allow read, write: if true;
+    }
+
+    // Official Staff Field Visits
+    match /visits/{visitId} {
       allow read, write: if true;
     }
 
@@ -42,7 +47,12 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // Organization & Compliance Settings
+    // Issued Official Letters Archive
+    match /issued_letters/{letterId} {
+      allow read, write: if true;
+    }
+
+    // Organization & Job Location Settings
     match /company_settings/{settingId} {
       allow read, write: if true;
     }

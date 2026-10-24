@@ -2,7 +2,7 @@
   "entities": {
     "Employee": {
       "title": "Employee",
-      "description": "Master employee personnel record for NGO and corporate staff",
+      "description": "Master employee personnel and duty roster record for LEEDO staff",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -25,19 +25,52 @@
         "status": { "type": "string" },
         "workStation": { "type": "string" },
         "assignedProject": { "type": "string" },
+        "jobLocations": { "type": "array" },
+        "dutyDays": { "type": "array" },
+        "shiftStartTime": { "type": "string" },
+        "shiftEndTime": { "type": "string" },
+        "dailyDutyHours": { "type": "number" },
+        "weeklyDutyDaysCount": { "type": "number" },
+        "casualLeaveQuota": { "type": "number" },
+        "sickLeaveQuota": { "type": "number" },
         "grossSalary": { "type": "number" },
         "basicSalary": { "type": "number" },
         "houseRent": { "type": "number" },
         "medicalAllowance": { "type": "number" },
         "conveyanceAllowance": { "type": "number" },
+        "mobileAllowance": { "type": "number" },
+        "travelAllowance": { "type": "number" },
+        "advanceBalance": { "type": "number" },
         "pfDeductionPercentage": { "type": "number" },
-        "taxDeduction": { "type": "number" }
+        "taxDeduction": { "type": "number" },
+        "reportingManagerId": { "type": "string" },
+        "reportingManagerName": { "type": "string" }
       },
       "required": ["id", "fullName", "email", "designation", "department", "status"]
     },
+    "Timesheet": {
+      "title": "Timesheet",
+      "description": "Monthly staff roster and project duty timesheet logs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "weekStarting": { "type": "string" },
+        "projectCode": { "type": "string" },
+        "projectName": { "type": "string" },
+        "activityDescription": { "type": "string" },
+        "hours": { "type": "object" },
+        "totalHours": { "type": "number" },
+        "status": { "type": "string" },
+        "supervisorComment": { "type": "string" },
+        "correctionRequests": { "type": "array" }
+      },
+      "required": ["id", "employeeId", "employeeName", "weekStarting", "projectCode", "totalHours", "status"]
+    },
     "Attendance": {
       "title": "Attendance",
-      "description": "Daily punch and field work logs",
+      "description": "Daily punch, GPS coordinates, and field work logs",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -47,6 +80,8 @@
         "clockInTime": { "type": "string" },
         "clockOutTime": { "type": "string" },
         "workMode": { "type": "string" },
+        "punchLocationName": { "type": "string" },
+        "locationNote": { "type": "string" },
         "status": { "type": "string" }
       },
       "required": ["id", "employeeId", "date", "clockInTime", "status"]
@@ -99,12 +134,28 @@
         "clearanceStatus": { "type": "string" }
       },
       "required": ["id", "employeeId", "separationType", "lastWorkingDate", "clearanceStatus"]
+    },
+    "CompanySettings": {
+      "title": "CompanySettings",
+      "description": "LEEDO organization settings, active centers and job locations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyName": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "jobLocations": { "type": "array" }
+      },
+      "required": ["id"]
     }
   },
   "firestore": {
     "/employees/{employeeId}": {
       "schema": "Employee",
-      "description": "Master employee records"
+      "description": "Master employee and duty roster records"
+    },
+    "/timesheets/{timesheetId}": {
+      "schema": "Timesheet",
+      "description": "Monthly duty logs and project timesheets"
     },
     "/attendance/{attendanceId}": {
       "schema": "Attendance",
@@ -121,6 +172,10 @@
     "/separations/{separationId}": {
       "schema": "Separation",
       "description": "Staff resignation, exit clearance and final settlement"
+    },
+    "/company_settings/{settingId}": {
+      "schema": "CompanySettings",
+      "description": "Organization profile and job location centers"
     }
   }
 }

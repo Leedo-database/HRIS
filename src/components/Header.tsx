@@ -13,7 +13,11 @@ import {
   Image as ImageIcon, 
   LogOut, 
   User as UserIcon,
-  Menu
+  Menu,
+  Cloud,
+  CheckCircle2,
+  RefreshCw,
+  WifiOff
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -30,6 +34,7 @@ interface HeaderProps {
   onLogout: () => void;
   onToggleMobile?: () => void;
   pendingApprovalsCount: number;
+  syncStatus?: 'synced' | 'syncing' | 'offline';
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -46,6 +51,7 @@ export const Header: React.FC<HeaderProps> = ({
   onLogout,
   onToggleMobile,
   pendingApprovalsCount,
+  syncStatus = 'synced',
 }) => {
   return (
     <header className="no-print bg-white border-b border-slate-200 sticky top-0 z-40 px-3 sm:px-6 py-2.5 shadow-xs">
@@ -93,13 +99,23 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               )}
             </div>
-            <p className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
+            <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
               <span>Reg: {company.registrationNo}</span>
               <span className="text-slate-300">•</span>
-              <span className="flex items-center text-emerald-600 font-medium">
-                <HardDrive className="w-3 h-3 mr-1 inline" /> Cloud Database
-              </span>
-            </p>
+              {syncStatus === 'synced' ? (
+                <span className="inline-flex items-center gap-1 text-emerald-600 font-semibold px-1.5 py-0.2 rounded-md bg-emerald-50 border border-emerald-200 text-[10px]" title="Staff roster, duty hours and timesheets are live-synced to Cloud Firestore">
+                  <CheckCircle2 className="w-3 h-3 inline text-emerald-600" /> Firebase Auto-Synced
+                </span>
+              ) : syncStatus === 'syncing' ? (
+                <span className="inline-flex items-center gap-1 text-blue-600 font-semibold px-1.5 py-0.2 rounded-md bg-blue-50 border border-blue-200 text-[10px] animate-pulse" title="Saving changes directly to Firebase Firestore">
+                  <RefreshCw className="w-3 h-3 inline animate-spin text-blue-600" /> Saving to Cloud...
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-amber-600 font-medium px-1.5 py-0.2 rounded-md bg-amber-50 border border-amber-200 text-[10px]" title="Working with local cache">
+                  <WifiOff className="w-3 h-3 inline text-amber-600" /> Offline Cached
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
