@@ -146,6 +146,24 @@
         "jobLocations": { "type": "array" }
       },
       "required": ["id"]
+    },
+    "GovernmentHoliday": {
+      "title": "GovernmentHoliday",
+      "description": "Official Bangladesh national, religious, and executive order government holidays",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "titleBangla": { "type": "string" },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "daysCount": { "type": "number" },
+        "type": { "type": "string" },
+        "description": { "type": "string" },
+        "isGazetted": { "type": "boolean" },
+        "year": { "type": "number" }
+      },
+      "required": ["id", "title", "startDate", "endDate", "daysCount", "type", "year"]
     }
   },
   "firestore": {
@@ -164,6 +182,10 @@
     "/leaves/{leaveId}": {
       "schema": "LeaveRequest",
       "description": "Staff leave applications and supervisor recommendations"
+    },
+    "/holidays/{holidayId}": {
+      "schema": "GovernmentHoliday",
+      "description": "Official government and gazetted public holidays"
     },
     "/payroll/{payrollId}": {
       "schema": "Payroll",

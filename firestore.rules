@@ -17,6 +17,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Official Government & Public Holidays
+    match /holidays/{holidayId} {
+      allow read, write: if true;
+    }
+
     // Staff Roster & Project Timesheets
     match /timesheets/{timesheetId} {
       allow read, write: if true;

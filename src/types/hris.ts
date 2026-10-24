@@ -194,6 +194,30 @@ export interface AttendanceRecord {
   locationAccuracy?: number;
   mapsUrl?: string;
   punchLocationName?: string;
+  gpsSource?: 'Live Device GPS' | 'Assigned Center Coordinates' | 'Manual Punch';
+  locationAddress?: string;
+}
+
+export type HolidayType = 
+  | 'National Holiday (জাতীয় দিবস)'
+  | 'Public / Religious (সাধারণ ও ধর্মীয় ছুটি)'
+  | 'Executive Order (নির্বাহী আদেশে সরকারি ছুটি)'
+  | 'Optional / Restricted (ঐচ্ছিক ছুটি)';
+
+export interface GovernmentHoliday {
+  id: string;
+  title: string;
+  titleBangla?: string;
+  startDate: string; // YYYY-MM-DD
+  endDate: string;   // YYYY-MM-DD
+  daysCount: number;
+  type: HolidayType;
+  description?: string;
+  isGazetted: boolean;
+  year: number;
+  applicableLocations?: string[]; // 'All' or specific centers
+  createdBy?: string;
+  createdAt?: string;
 }
 
 export interface TimesheetCorrectionRequest {

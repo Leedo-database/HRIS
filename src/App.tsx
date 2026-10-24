@@ -15,8 +15,10 @@ import {
   UserCredential,
   LetterType,
   IssuedLetter,
-  LEEDO_JOB_LOCATIONS
+  LEEDO_JOB_LOCATIONS,
+  GovernmentHoliday
 } from './types/hris';
+import { OFFICIAL_BANGLADESH_HOLIDAYS_2026 } from './data/bangladeshHolidays';
 import { 
   INITIAL_COMPANY_PROFILE, 
   INITIAL_EMPLOYEES, 
@@ -61,6 +63,10 @@ import {
   saveVisitToCloud,
   fetchCompanyConfigFromCloud,
   saveCompanyConfigToCloud,
+  fetchHolidaysFromCloud,
+  subscribeHolidaysFromCloud,
+  saveHolidayToCloud,
+  deleteHolidayFromCloud,
   testFirestoreConnection
 } from './utils/firebaseSync';
 
@@ -142,6 +148,9 @@ export default function App() {
   );
   const [company, setCompany] = useState<CompanyProfile>(() =>
     loadFromStorage(STORAGE_KEYS.COMPANY, INITIAL_COMPANY_PROFILE)
+  );
+  const [holidays, setHolidays] = useState<GovernmentHoliday[]>(() =>
+    loadFromStorage(STORAGE_KEYS.HOLIDAYS, OFFICIAL_BANGLADESH_HOLIDAYS_2026)
   );
 
   // LEEDO Job Locations & Centers Master State
@@ -324,7 +333,17 @@ export default function App() {
       }
     });
 
-    // 7. Load Organization Profile & Job Locations
+    // 7. Live subscribe to Government & Public Holidays
+    const unsubHolidays = subscribeHolidaysFromCloud((cloudHolidays) => {
+      if (!isMounted) return;
+      if (cloudHolidays && cloudHolidays.length > 0) {
+        setHolidays(cloudHolidays);
+        saveToStorage(STORAGE_KEYS.HOLIDAYS, cloudHolidays);
+        setSyncStatus('synced');
+      }
+    });
+
+    // 8. Load Organization Profile & Job Locations
     fetchCompanyConfigFromCloud().then((config) => {
       if (!isMounted || !config) return;
       if (config.company) {
@@ -350,6 +369,12 @@ export default function App() {
         saveToStorage(STORAGE_KEYS.TIMESHEETS, cloudTs);
       }
     });
+    fetchHolidaysFromCloud().then((cloudHolidays) => {
+      if (isMounted && cloudHolidays && cloudHolidays.length > 0) {
+        setHolidays(cloudHolidays);
+        saveToStorage(STORAGE_KEYS.HOLIDAYS, cloudHolidays);
+      }
+    });
 
     return () => {
       isMounted = false;
@@ -359,6 +384,7 @@ export default function App() {
       unsubLeaves();
       unsubSeparations();
       unsubVisits();
+      unsubHolidays();
     };
   }, []);
 
@@ -524,6 +550,40 @@ export default function App() {
     setLeaves(updated);
     saveToStorage(STORAGE_KEYS.LEAVES, updated);
     saveLeaveToCloud(leave);
+  };
+
+  const handleAddHoliday = (holiday: GovernmentHoliday) => {
+    const updated = [...holidays.filter((h) => h.id !== holiday.id), holiday].sort((a, b) =>
+      a.startDate.localeCompare(b.startDate)
+    );
+    setHolidays(updated);
+    saveToStorage(STORAGE_KEYS.HOLIDAYS, updated);
+    setSyncStatus('syncing');
+    saveHolidayToCloud(holiday)
+      .then(() => setSyncStatus('synced'))
+      .catch(() => setSyncStatus('offline'));
+  };
+
+  const handleUpdateHoliday = (holiday: GovernmentHoliday) => {
+    const updated = holidays.map((h) => (h.id === holiday.id ? holiday : h)).sort((a, b) =>
+      a.startDate.localeCompare(b.startDate)
+    );
+    setHolidays(updated);
+    saveToStorage(STORAGE_KEYS.HOLIDAYS, updated);
+    setSyncStatus('syncing');
+    saveHolidayToCloud(holiday)
+      .then(() => setSyncStatus('synced'))
+      .catch(() => setSyncStatus('offline'));
+  };
+
+  const handleDeleteHoliday = (holidayId: string) => {
+    const updated = holidays.filter((h) => h.id !== holidayId);
+    setHolidays(updated);
+    saveToStorage(STORAGE_KEYS.HOLIDAYS, updated);
+    setSyncStatus('syncing');
+    deleteHolidayFromCloud(holidayId)
+      .then(() => setSyncStatus('synced'))
+      .catch(() => setSyncStatus('offline'));
   };
 
   const handleAddVisit = (visit: VisitAuthorization) => {
@@ -847,6 +907,8 @@ export default function App() {
                 employees={employees}
                 currentUser={currentUser}
                 currentRole={currentRole}
+                jobLocations={jobLocations}
+                holidays={holidays}
                 onAddLeave={handleAddLeave}
                 onUpdateLeave={handleUpdateLeave}
                 onPrintLeaveForm={(l) => {
@@ -855,6 +917,9 @@ export default function App() {
                   setLetterDraftType('leave_application');
                   setActiveTab('letters');
                 }}
+                onAddHoliday={handleAddHoliday}
+                onUpdateHoliday={handleUpdateHoliday}
+                onDeleteHoliday={handleDeleteHoliday}
               />
             )}
 

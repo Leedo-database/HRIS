@@ -22,8 +22,10 @@ import {
   VisitAuthorization, 
   IssuedLetter, 
   CompanyProfile,
-  LEEDO_JOB_LOCATIONS
+  LEEDO_JOB_LOCATIONS,
+  GovernmentHoliday
 } from '../types/hris';
+import { OFFICIAL_BANGLADESH_HOLIDAYS_2026 } from '../data/bangladeshHolidays';
 import {
   INITIAL_EMPLOYEES,
   INITIAL_ATTENDANCE,
@@ -590,3 +592,75 @@ export async function saveIssuedLetterToCloud(letter: IssuedLetter): Promise<voi
     console.warn('Failed to save issued letter to cloud:', err);
   }
 }
+
+// ---------------------------------------------------------------------------
+// 9. GOVERNMENT & PUBLIC HOLIDAYS SYNC
+// ---------------------------------------------------------------------------
+
+export async function fetchHolidaysFromCloud(): Promise<GovernmentHoliday[]> {
+  const path = 'holidays';
+  try {
+    const snap = await getDocs(collection(db, path));
+    if (!snap.empty) {
+      const list: GovernmentHoliday[] = [];
+      for (const d of snap.docs) {
+        const h = d.data() as GovernmentHoliday;
+        if (h && h.id && h.title) {
+          list.push(h);
+        }
+      }
+      if (list.length > 0) {
+        return list.sort((a, b) => a.startDate.localeCompare(b.startDate));
+      }
+    }
+    // Auto-seed initial official holidays
+    for (const h of OFFICIAL_BANGLADESH_HOLIDAYS_2026) {
+      await setDoc(doc(db, 'holidays', h.id), h);
+    }
+    return OFFICIAL_BANGLADESH_HOLIDAYS_2026;
+  } catch (err) {
+    console.warn('Could not read holidays from Firestore:', err);
+    return OFFICIAL_BANGLADESH_HOLIDAYS_2026;
+  }
+}
+
+export function subscribeHolidaysFromCloud(onData: (holidays: GovernmentHoliday[]) => void): () => void {
+  const path = 'holidays';
+  return onSnapshot(
+    collection(db, path),
+    (snapshot) => {
+      if (!snapshot.empty) {
+        const list: GovernmentHoliday[] = [];
+        snapshot.forEach((d) => {
+          const h = d.data() as GovernmentHoliday;
+          if (h && h.id && h.title) {
+            list.push(h);
+          }
+        });
+        if (list.length > 0) {
+          onData(list.sort((a, b) => a.startDate.localeCompare(b.startDate)));
+        }
+      }
+    },
+    (error) => {
+      console.warn('Firestore onSnapshot error on holidays:', error);
+    }
+  );
+}
+
+export async function saveHolidayToCloud(holiday: GovernmentHoliday): Promise<void> {
+  try {
+    await setDoc(doc(db, 'holidays', holiday.id), holiday, { merge: true });
+  } catch (err) {
+    console.warn('Failed to save holiday to cloud:', err);
+  }
+}
+
+export async function deleteHolidayFromCloud(holidayId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'holidays', holidayId));
+  } catch (err) {
+    console.warn('Failed to delete holiday from cloud:', err);
+  }
+}
+

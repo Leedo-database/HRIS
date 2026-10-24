@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Employee, LeaveRequest, LeaveBalance, LeaveType, UserRole } from '../../types/hris';
+import { Employee, LeaveRequest, LeaveBalance, LeaveType, UserRole, GovernmentHoliday, LEEDO_JOB_LOCATIONS } from '../../types/hris';
 import { 
   CalendarDays, 
   Plus, 
@@ -14,9 +14,11 @@ import {
   ShieldCheck,
   User,
   ArrowRight,
-  Printer
+  Printer,
+  Landmark
 } from 'lucide-react';
 import { isEmployeeActive } from '../../utils/calculations';
+import { GovernmentHolidaysTab } from './GovernmentHolidaysTab';
 
 interface LeaveModuleProps {
   leaves: LeaveRequest[];
@@ -24,9 +26,14 @@ interface LeaveModuleProps {
   employees: Employee[];
   currentUser: Employee;
   currentRole: UserRole;
+  jobLocations?: string[];
+  holidays?: GovernmentHoliday[];
   onAddLeave: (leave: LeaveRequest) => void;
   onUpdateLeave: (leave: LeaveRequest) => void;
   onPrintLeaveForm: (leave: LeaveRequest) => void;
+  onAddHoliday?: (holiday: GovernmentHoliday) => void;
+  onUpdateHoliday?: (holiday: GovernmentHoliday) => void;
+  onDeleteHoliday?: (holidayId: string) => void;
 }
 
 export const LeaveModule: React.FC<LeaveModuleProps> = ({
@@ -35,10 +42,16 @@ export const LeaveModule: React.FC<LeaveModuleProps> = ({
   employees,
   currentUser,
   currentRole,
+  jobLocations = [...LEEDO_JOB_LOCATIONS],
+  holidays = [],
   onAddLeave,
   onUpdateLeave,
   onPrintLeaveForm,
+  onAddHoliday = () => {},
+  onUpdateHoliday = () => {},
+  onDeleteHoliday = () => {},
 }) => {
+  const [activeSubTab, setActiveSubTab] = useState<'applications' | 'holidays'>('applications');
   const [isApplying, setIsApplying] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('All');
   
@@ -190,21 +203,70 @@ export const LeaveModule: React.FC<LeaveModuleProps> = ({
         <div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
             <CalendarDays className="w-5 h-5 text-indigo-600" />
-            <span>Leave Management & Multi-Tier Approvals</span>
+            <span>Leave Management & Public Holidays (ছুটি ও সরকারি ছুটির ক্যালেন্ডার)</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Annual casual & medical sick leaves with colleague handover acceptance and HR approval workflow
+            Manage staff leaves, colleague duty handover, and official government gazette holidays
           </p>
         </div>
 
+        {activeSubTab === 'applications' && (
+          <button
+            onClick={() => setIsApplying(true)}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Apply For Leave</span>
+          </button>
+        )}
+      </div>
+
+      {/* Sub-Tabs Switcher */}
+      <div className="flex border-b border-slate-200 gap-2">
         <button
-          onClick={() => setIsApplying(true)}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
+          type="button"
+          onClick={() => setActiveSubTab('applications')}
+          className={`flex items-center gap-2 py-3 px-4 font-bold text-xs border-b-2 transition-all cursor-pointer ${
+            activeSubTab === 'applications'
+              ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50 rounded-t-xl'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
         >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Apply For Leave</span>
+          <CalendarDays className="w-4 h-4" />
+          <span>Staff Leave Applications (ছুটির আবেদন)</span>
+          <span className="ml-1 text-[10px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 font-mono font-bold">
+            {filteredLeaves.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('holidays')}
+          className={`flex items-center gap-2 py-3 px-4 font-bold text-xs border-b-2 transition-all cursor-pointer ${
+            activeSubTab === 'holidays'
+              ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50 rounded-t-xl'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Landmark className="w-4 h-4 text-emerald-600" />
+          <span>Government & Public Holidays (সরকারি ছুটি ও ইনপুট)</span>
+          <span className="ml-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-mono font-bold">
+            {holidays.length}
+          </span>
         </button>
       </div>
+
+      {activeSubTab === 'holidays' ? (
+        <GovernmentHolidaysTab
+          holidays={holidays}
+          currentRole={currentRole}
+          jobLocations={jobLocations}
+          onAddHoliday={onAddHoliday}
+          onUpdateHoliday={onUpdateHoliday}
+          onDeleteHoliday={onDeleteHoliday}
+        />
+      ) : (
+        <>
 
       {/* Handover Requests Assigned to Me Banner */}
       {pendingHandoverForMe.length > 0 && (
@@ -637,6 +699,8 @@ export const LeaveModule: React.FC<LeaveModuleProps> = ({
           </table>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 };
