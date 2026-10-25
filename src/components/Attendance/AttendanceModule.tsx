@@ -22,7 +22,9 @@ import {
   RefreshCw,
   Info,
   Check,
-  AlertTriangle
+  AlertTriangle,
+  Moon,
+  Zap
 } from 'lucide-react';
 import { getTodayAttendanceSummary } from '../../utils/calculations';
 import { BiometricImportModal } from './BiometricImportModal';
@@ -339,6 +341,59 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
     onUpdateAttendance(updated);
   };
 
+  // 10:00 PM Auto-Checkout Rule ("rat 10 tar por auto checkout hoye jabe sobar")
+  const runTenPmAutoCheckout = (forced = false) => {
+    const currentHour = new Date().getHours();
+    const shouldRun = forced || currentHour >= 22;
+
+    const unclosedRecords = attendance.filter((a) => {
+      if (!a.clockInTime || a.clockOutTime) return false;
+      // Either past date, or today and past 10 PM (or forced)
+      if (a.date < todayStr) return true;
+      if (a.date === todayStr && shouldRun) return true;
+      return false;
+    });
+
+    if (unclosedRecords.length === 0) {
+      if (forced) alert('All employees are already checked out. No unclosed punches found.');
+      return;
+    }
+
+    let count = 0;
+    unclosedRecords.forEach((rec) => {
+      const inMins = parseTimeToMinutes(rec.clockInTime);
+      const outMins = 22 * 60; // 10:00 PM = 22:00
+      const diffMins = Math.max(60, outMins - inMins);
+      const calculatedHours = Math.round((diffMins / 60) * 10) / 10;
+
+      const updatedRecord: AttendanceRecord = {
+        ...rec,
+        clockOutTime: '22:00:00',
+        hoursWorked: calculatedHours,
+        locationNote: (rec.locationNote ? rec.locationNote + ' | ' : '') + 'Auto-Checked Out at 22:00 (10 PM Cut-off)',
+      };
+      onUpdateAttendance(updatedRecord);
+      count++;
+    });
+
+    if (forced) {
+      alert(`Auto-checkout completed at 22:00 (10:00 PM) for ${count} staff member(s).`);
+    }
+  };
+
+  // Run auto-checkout check on mount and every 60s
+  useEffect(() => {
+    runTenPmAutoCheckout(false);
+    const interval = setInterval(() => {
+      runTenPmAutoCheckout(false);
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [attendance, todayStr]);
+
+  const pendingAutoCheckoutCount = attendance.filter(
+    (a) => a.clockInTime && !a.clockOutTime && a.date <= todayStr
+  ).length;
+
   const handleBiometricImport = (importedRecords: AttendanceRecord[]) => {
     if (onImportAttendanceRecords) {
       onImportAttendanceRecords(importedRecords);
@@ -420,16 +475,33 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
           </p>
         </div>
 
-        {/* Biometric Machine Import Button: STRICTLY HR Admin Only */}
+        {/* Action Buttons for HR Admin */}
         {currentRole === 'hr_admin' && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* 10:00 PM Auto-Checkout Trigger Button */}
+            <button
+              type="button"
+              onClick={() => runTenPmAutoCheckout(true)}
+              className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-xs transition-all cursor-pointer"
+              title="Auto-checkout all staff at 10:00 PM (22:00) who checked in today or in past days without clocking out"
+            >
+              <Moon className="w-3.5 h-3.5 text-amber-400" />
+              <span>10 PM Auto-Checkout (রাত ১০টা অটো-চেকআউট)</span>
+              {pendingAutoCheckoutCount > 0 && (
+                <span className="bg-amber-500 text-slate-900 text-[10px] font-black px-1.5 py-0.2 rounded-full">
+                  {pendingAutoCheckoutCount}
+                </span>
+              )}
+            </button>
+
+            {/* Biometric Machine & OCR Import Button */}
             <button
               type="button"
               onClick={() => setIsBiometricModalOpen(true)}
               className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-md shadow-indigo-200 transition-all cursor-pointer"
             >
               <FileSpreadsheet className="w-4 h-4 text-indigo-200" />
-              <span>Import Biometric Machine .CSV</span>
+              <span>Biometric / OCR Importer</span>
             </button>
           </div>
         )}

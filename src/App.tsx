@@ -950,6 +950,7 @@ export default function App() {
                   setPayroll(updated);
                   saveToStorage(STORAGE_KEYS.PAYROLL, updated);
                 }}
+                onUpdateEmployee={handleSaveEmployee}
               />
             )}
 

@@ -86,6 +86,7 @@ export interface Employee {
   shiftEndTime?: string; // e.g. '18:00'
   dailyDutyHours?: number; // e.g. 8 or 3
   weeklyDutyDaysCount?: number; // e.g. 6 or 3
+  biometricEnrollNo?: number | string; // Fingerprint machine AC No. / ID (e.g. 2, 3, 4, 10, 19, 25, 27)
 
   // Leave Entitlement Quotas (auto-calculated by duty ratio & mid-year join, editable by HR)
   casualLeaveQuota?: number; // standard 16 days for 6-day 8-hr staff
