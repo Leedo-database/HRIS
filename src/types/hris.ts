@@ -332,6 +332,14 @@ export interface PayrollRecord {
   bankAccount: string;
   bankName: string;
   
+  // Monthly Attendance & Holiday Breakdown (Bangladesh Labor Law & HR Policy)
+  totalDaysInMonth?: number;
+  totalWorkingDays?: number;
+  workedDays?: number;
+  weekends?: number;
+  govtHolidays?: number;
+  approvedLeaves?: number;
+
   // Specific NGO Salary Components: Gross, Mobile, Travel
   grossSalary: number;
   mobileAllowance?: number;

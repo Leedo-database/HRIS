@@ -5,8 +5,11 @@ import {
   TimesheetCorrectionRequest, 
   UserRole,
   CompanyProfile,
-  LEEDO_JOB_LOCATIONS
+  LEEDO_JOB_LOCATIONS,
+  GovernmentHoliday
 } from '../../types/hris';
+import { OFFICIAL_BANGLADESH_HOLIDAYS_2026 } from '../../data/bangladeshHolidays';
+import { getHolidayOnDate } from '../../utils/calculations';
 import { 
   CalendarCheck2, 
   Plus, 
@@ -35,6 +38,7 @@ interface TimesheetModuleProps {
   currentRole: UserRole;
   company?: CompanyProfile;
   jobLocations?: string[];
+  holidays?: GovernmentHoliday[];
   onAddTimesheet: (entry: TimesheetEntry) => void;
   onUpdateTimesheet: (entry: TimesheetEntry) => void;
 }
@@ -58,6 +62,7 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
   currentRole,
   company,
   jobLocations = [...LEEDO_JOB_LOCATIONS],
+  holidays = OFFICIAL_BANGLADESH_HOLIDAYS_2026,
   onAddTimesheet,
   onUpdateTimesheet,
 }) => {
@@ -232,6 +237,7 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
     const days = [];
     let scheduledDutyDays = 0;
     let presentDays = 0;
+    let govtHolidayDays = 0;
     let leaveDays = 0;
     let absentDays = 0;
     let totalWorkedHours = 0;
@@ -242,12 +248,22 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
       const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       
       const isScheduledDuty = empDutyDays.includes(dayOfWeekShort);
+      const hol = getHolidayOnDate(dateStr, holidays);
 
       let status = 'Weekly Off-Day';
       let hoursLogged = 0;
       let notes = 'Weekend / Rostered Rest Day';
+      let isHoliday = false;
 
-      if (isScheduledDuty) {
+      if (hol) {
+        // Official Bangladesh Government Holiday (Paid Day Off)
+        isHoliday = true;
+        govtHolidayDays++;
+        status = `Govt Holiday (সরকারি ছুটি)`;
+        hoursLogged = dailyHours; // Fully credited paid standard duty hours
+        totalWorkedHours += dailyHours;
+        notes = `Official Gazette Public Holiday: ${hol.titleBangla || hol.title} (Paid Day Off)`;
+      } else if (isScheduledDuty) {
         scheduledDutyDays++;
         // Sample leave distribution: e.g. day 18 or 19 is casual/sick leave if employee had leaves
         if (day === 18 && (emp.casualLeaveQuota ?? 0) > 0 && emp.id === '1006') {
@@ -274,6 +290,8 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
         dateStr,
         dayOfWeek: dayOfWeekShort,
         isScheduledDuty,
+        isHoliday,
+        holidayTitle: hol ? (hol.titleBangla || hol.title) : undefined,
         status,
         hoursLogged,
         notes,
@@ -285,9 +303,10 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
       daysInMonth,
       scheduledDutyDays,
       presentDays,
+      govtHolidayDays,
       leaveDays,
       absentDays,
-      offDays: daysInMonth - scheduledDutyDays,
+      offDays: Math.max(0, daysInMonth - scheduledDutyDays - govtHolidayDays),
       totalWorkedHours,
     };
   };
@@ -310,6 +329,7 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
       'Month',
       'Scheduled Duty Days (কাজ করার কথা)',
       'Present Days (কতো দিন করেছে)',
+      'Govt Holidays (সরকারি সাধারণ ছুটি)',
       'Worked Hours (কতো ঘণ্টা করেছে)',
       'Leave Days (ছুটি নিয়েছে কিনা)',
       'Absent Days (অনুপস্থিত ছিল কিনা)',
@@ -347,6 +367,7 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
         `"${selectedMonth}"`,
         stats.scheduledDutyDays,
         stats.presentDays,
+        stats.govtHolidayDays,
         stats.totalWorkedHours,
         stats.leaveDays,
         stats.absentDays,
@@ -876,7 +897,7 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                 </div>
 
                 {/* Monthly Reconciliation Summary Box */}
-                <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 bg-indigo-50/50 p-3 rounded-xl border border-indigo-100 text-center">
+                <div className="grid grid-cols-2 sm:grid-cols-7 gap-2 bg-indigo-50/50 p-3 rounded-xl border border-indigo-100 text-center">
                   <div className="p-2 bg-white rounded-lg border border-indigo-100">
                     <span className="text-[10px] text-slate-500 font-semibold block">Month Days</span>
                     <span className="font-bold text-slate-900 text-sm">{stats.daysInMonth}</span>
@@ -888,6 +909,10 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                   <div className="p-2 bg-white rounded-lg border border-indigo-100">
                     <span className="text-[10px] text-emerald-700 font-semibold block">Present Days</span>
                     <span className="font-bold text-emerald-800 text-sm">{stats.presentDays}</span>
+                  </div>
+                  <div className="p-2 bg-teal-50 rounded-lg border border-teal-200">
+                    <span className="text-[10px] text-teal-800 font-bold block">Govt Holidays</span>
+                    <span className="font-black text-teal-900 text-sm">{stats.govtHolidayDays} (Paid)</span>
                   </div>
                   <div className="p-2 bg-white rounded-lg border border-indigo-100">
                     <span className="text-[10px] text-amber-700 font-semibold block">Leave Taken</span>
@@ -916,7 +941,7 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                         <th className="p-1.5 border-r border-slate-300 w-10 text-center">Day</th>
                         <th className="p-1.5 border-r border-slate-300 w-24">Date</th>
                         <th className="p-1.5 border-r border-slate-300 w-14">Weekday</th>
-                        <th className="p-1.5 border-r border-slate-300 w-36">Status</th>
+                        <th className="p-1.5 border-r border-slate-300 w-44">Status</th>
                         <th className="p-1.5 border-r border-slate-300 text-center w-16">Hours</th>
                         <th className="p-1.5">Project Task & Field Activity Description</th>
                       </tr>
@@ -925,7 +950,13 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                       {stats.days.map((d) => (
                         <tr 
                           key={d.dayNumber} 
-                          className={d.isScheduledDuty ? 'hover:bg-slate-50' : 'bg-slate-50/60 text-slate-400'}
+                          className={
+                            d.isHoliday 
+                              ? 'bg-teal-50/80 font-medium border-l-4 border-l-teal-600' 
+                              : d.isScheduledDuty 
+                              ? 'hover:bg-slate-50' 
+                              : 'bg-slate-50/60 text-slate-400'
+                          }
                         >
                           <td className="p-1.5 border-r border-slate-200 text-center font-mono font-bold">
                             {d.dayNumber}
@@ -937,18 +968,32 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                             {d.dayOfWeek}
                           </td>
                           <td className="p-1.5 border-r border-slate-200 font-semibold">
-                            <span className={
-                              d.status.includes('Present') ? 'text-emerald-700' :
-                              d.status.includes('Leave') ? 'text-amber-700' : 'text-slate-400'
-                            }>
-                              {d.status}
-                            </span>
+                            {d.isHoliday ? (
+                              <span className="inline-flex items-center gap-1 text-teal-800 font-bold bg-teal-100 px-1.5 py-0.5 rounded text-[10px]">
+                                <span>🏛️ Govt Holiday (Paid)</span>
+                              </span>
+                            ) : (
+                              <span className={
+                                d.status.includes('Present') ? 'text-emerald-700' :
+                                d.status.includes('Leave') ? 'text-amber-700' : 'text-slate-400'
+                              }>
+                                {d.status}
+                              </span>
+                            )}
                           </td>
                           <td className="p-1.5 border-r border-slate-200 text-center font-mono font-bold">
-                            {d.hoursLogged > 0 ? `${d.hoursLogged}h` : '--'}
+                            {d.hoursLogged > 0 ? (
+                              <span className={d.isHoliday ? 'text-teal-800 font-extrabold' : ''}>
+                                {d.hoursLogged}h
+                              </span>
+                            ) : '--'}
                           </td>
                           <td className="p-1.5 text-slate-700">
-                            {d.notes}
+                            {d.isHoliday ? (
+                              <span className="text-teal-900 font-bold">
+                                {d.notes}
+                              </span>
+                            ) : d.notes}
                           </td>
                         </tr>
                       ))}
@@ -1088,6 +1133,7 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                         <th className="p-2 border-r border-slate-300">Designation & Station</th>
                         <th className="p-2 border-r border-slate-300 text-center">Duty Days<br/><span className="text-[9px] font-normal">(কথা)</span></th>
                         <th className="p-2 border-r border-slate-300 text-center text-emerald-800">Present<br/><span className="text-[9px] font-normal">(করেছে)</span></th>
+                        <th className="p-2 border-r border-slate-300 text-center text-teal-800 font-extrabold bg-teal-50/70">Govt Hol<br/><span className="text-[9px] font-normal">(সরকারি ছুটি)</span></th>
                         <th className="p-2 border-r border-slate-300 text-center text-indigo-900 font-extrabold">Total Hrs<br/><span className="text-[9px] font-normal">(ঘণ্টা)</span></th>
                         <th className="p-2 border-r border-slate-300 text-center text-amber-800">Leave<br/><span className="text-[9px] font-normal">(ছুটি)</span></th>
                         <th className="p-2 border-r border-slate-300 text-center text-rose-800">Absent<br/><span className="text-[9px] font-normal">(অনুপস্থিত)</span></th>
@@ -1116,6 +1162,9 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                             </td>
                             <td className="p-2 border-r border-slate-200 text-center font-mono font-bold text-emerald-700">
                               {stats.presentDays} d
+                            </td>
+                            <td className="p-2 border-r border-slate-200 text-center font-mono font-bold text-teal-800 bg-teal-50/50">
+                              {stats.govtHolidayDays} d <span className="text-[9px] text-teal-600 font-normal">(paid)</span>
                             </td>
                             <td className="p-2 border-r border-slate-200 text-center font-mono font-bold text-indigo-700">
                               {stats.totalWorkedHours} hrs

@@ -1,4 +1,4 @@
-import { Employee, AttendanceRecord } from '../types/hris';
+import { Employee, AttendanceRecord, GovernmentHoliday } from '../types/hris';
 
 export function formatCurrency(amount: number, symbol: string = '৳'): string {
   return `${symbol} ${Number(amount || 0).toLocaleString('en-US', {
@@ -328,7 +328,85 @@ export function calculateSalaryNet(
 }
 
 /**
- * Calculates a consolidated monthly timesheet and duty fulfillment summary for all staff.
+ * Helper to identify if a specific date string (YYYY-MM-DD) falls on an official Government Holiday.
+ */
+export function getHolidayOnDate(
+  dateStr: string,
+  holidays: GovernmentHoliday[] = []
+): GovernmentHoliday | undefined {
+  if (!dateStr || !holidays || holidays.length === 0) return undefined;
+  return holidays.find((h) => dateStr >= h.startDate && dateStr <= h.endDate);
+}
+
+/**
+ * Calculates calendar metrics for a month including calendar days, weekends, and gazetted Government Holidays.
+ */
+export interface MonthHolidayMetrics {
+  daysInMonth: number;
+  totalDays: number;
+  weekendsCount: number;
+  weekendCount: number;
+  govtHolidaysCount: number;
+  standardWorkingDays: number;
+  workingDays: number;
+  holidaysInMonth: { holiday: GovernmentHoliday; dateStr: string; day: number }[];
+  uniqueHolidays: GovernmentHoliday[];
+}
+
+export function getMonthHolidayMetrics(
+  monthKey: string, // '2026-10'
+  holidays: GovernmentHoliday[] = []
+): MonthHolidayMetrics {
+  const [yearStr, monthStr] = monthKey.split('-');
+  const year = parseInt(yearStr, 10) || 2026;
+  const month = parseInt(monthStr, 10) || 10;
+  const daysInMonth = new Date(year, month, 0).getDate();
+
+  let weekendsCount = 0;
+  let govtHolidaysCount = 0;
+  const holidaysInMonth: { holiday: GovernmentHoliday; dateStr: string; day: number }[] = [];
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dObj = new Date(year, month - 1, day);
+    const dayOfWeek = dObj.getDay(); // 0 = Sun, 5 = Fri, 6 = Sat
+    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+    // Friday is statutory weekly off in Bangladesh
+    if (dayOfWeek === 5) {
+      weekendsCount++;
+    }
+
+    const hol = getHolidayOnDate(dateStr, holidays);
+    if (hol) {
+      govtHolidaysCount++;
+      holidaysInMonth.push({ holiday: hol, dateStr, day });
+    }
+  }
+
+  const standardWorkingDays = Math.max(0, daysInMonth - weekendsCount - govtHolidaysCount);
+
+  const uniqueHolidaysMap = new Map<string, GovernmentHoliday>();
+  holidaysInMonth.forEach((h) => {
+    uniqueHolidaysMap.set(h.holiday.id, h.holiday);
+  });
+  const uniqueHolidays = Array.from(uniqueHolidaysMap.values());
+
+  return {
+    daysInMonth,
+    totalDays: daysInMonth,
+    weekendsCount,
+    weekendCount: weekendsCount,
+    govtHolidaysCount,
+    standardWorkingDays,
+    workingDays: standardWorkingDays,
+    holidaysInMonth,
+    uniqueHolidays,
+  };
+}
+
+/**
+ * Calculates a consolidated monthly timesheet and duty fulfillment summary for all staff,
+ * factoring in Government Holidays, leaves, and weekends.
  */
 export interface StaffMonthlyTimesheetSummaryItem {
   employeeId: string;
@@ -338,6 +416,7 @@ export interface StaffMonthlyTimesheetSummaryItem {
   scheduledDutyDays: number;
   actualWorkedDays: number;
   totalWorkedHours: number;
+  govtHolidays: number;
   leaveDays: number;
   absentDays: number;
   dutyFulfillmentRate: number;
@@ -346,16 +425,16 @@ export interface StaffMonthlyTimesheetSummaryItem {
 export function calculateMonthlyStaffTimesheetSummary(
   employees: { id: string; fullName: string; designation: string; department: string; dutyDays?: string[]; dailyDutyHours?: number; status: string }[],
   attendance: { employeeId: string; hoursWorked?: number; status: string }[],
-  leaves: { employeeId: string; daysCount: number; status: string }[]
+  leaves: { employeeId: string; daysCount: number; status: string }[],
+  holidays: GovernmentHoliday[] = []
 ): StaffMonthlyTimesheetSummaryItem[] {
   const activeStaff = employees.filter((e) => e.status !== 'Terminated' && e.status !== 'Separated');
 
   return activeStaff.map((emp) => {
     const weeklyDays = (emp.dutyDays && emp.dutyDays.length > 0) ? emp.dutyDays.length : 6;
     const dailyHours = emp.dailyDutyHours || 8;
-    // Monthly scheduled days based on 4-week cycle (26 days for 6-day staff, 13 days for 3-day staff)
+    // Monthly scheduled days based on 4-week cycle
     const scheduledDutyDays = weeklyDays === 6 ? 26 : weeklyDays * 4;
-    const scheduledHours = scheduledDutyDays * dailyHours;
 
     const empAtt = attendance.filter((a) => a.employeeId === emp.id);
     const presentRecords = empAtt.filter((a) => a.status === 'Present' || a.status === 'Late' || a.status === 'Field Mission');
@@ -381,6 +460,7 @@ export function calculateMonthlyStaffTimesheetSummary(
       scheduledDutyDays,
       actualWorkedDays,
       totalWorkedHours,
+      govtHolidays: holidays.length > 0 ? holidays.length : 2,
       leaveDays,
       absentDays,
       dutyFulfillmentRate,

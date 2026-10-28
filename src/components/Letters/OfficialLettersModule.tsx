@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Employee, CompanyProfile, LetterType, IssuedLetter } from '../../types/hris';
+import { Employee, CompanyProfile, LetterType, IssuedLetter, PayrollRecord } from '../../types/hris';
 import { 
   FileCheck2, 
   Printer, 
@@ -20,10 +20,12 @@ import {
   Briefcase
 } from 'lucide-react';
 import { formatCurrency, numberToWords, isEmployeeActive } from '../../utils/calculations';
+import { exportOfficialLetterToDocx } from '../../utils/docxExport';
 
 interface OfficialLettersModuleProps {
   employees: Employee[];
   company: CompanyProfile;
+  payroll?: PayrollRecord[];
   initialLetterType?: LetterType;
   initialEmployee?: Employee | null;
   issuedLetters?: IssuedLetter[];
@@ -35,6 +37,7 @@ const MONTH_NAMES = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SE
 export const OfficialLettersModule: React.FC<OfficialLettersModuleProps> = ({
   employees,
   company,
+  payroll = [],
   initialLetterType = 'experience',
   initialEmployee = null,
   issuedLetters = [],
@@ -53,7 +56,6 @@ export const OfficialLettersModule: React.FC<OfficialLettersModuleProps> = ({
   const [referenceNo, setReferenceNo] = useState('');
   const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
   const [addressedToBank, setAddressedToBank] = useState('The Branch Manager, Brac Bank PLC, Banani Branch, Dhaka');
-  const [purposeOfCertificate, setPurposeOfCertificate] = useState('Visa Application / Foreign Embassy & Financial Verification');
   const [copied, setCopied] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
@@ -62,7 +64,33 @@ export const OfficialLettersModule: React.FC<OfficialLettersModuleProps> = ({
   const [filterLetterType, setFilterLetterType] = useState<string>('All');
   const [archivedLetterPreview, setArchivedLetterPreview] = useState<IssuedLetter | null>(null);
 
+  // Synchronize when initialEmployee or initialLetterType props change
+  useEffect(() => {
+    if (initialEmployee?.id) {
+      setSelectedStaffId(initialEmployee.id);
+    }
+  }, [initialEmployee]);
+
+  useEffect(() => {
+    if (initialLetterType) {
+      setSelectedType(initialLetterType);
+    }
+  }, [initialLetterType]);
+
   const emp = employees.find((e) => e.id === selectedStaffId) || employees[0];
+
+  // Latest calculated payroll record for this staff if available
+  const latestPayroll = payroll?.find((p) => p.employeeId === emp?.id);
+
+  // Dynamic salary computation: Prioritize latest payroll record, fallback to employee profile, and compute standard statutory allowances
+  const gross = latestPayroll?.grossSalary ?? (emp?.grossSalary || 0);
+  const basic = latestPayroll?.basicSalary ?? (emp?.basicSalary || Math.round(gross * 0.5));
+  const house = latestPayroll?.houseRent ?? (emp?.houseRent || Math.round(gross * 0.25));
+  const med = latestPayroll?.medicalAllowance ?? (emp?.medicalAllowance || Math.round(gross * 0.1));
+  const conv = latestPayroll?.conveyanceAllowance ?? (emp?.conveyanceAllowance || Math.round(gross * 0.1));
+  const mob = latestPayroll?.mobileAllowance ?? (emp?.mobileAllowance ?? 1000);
+  const trv = latestPayroll?.travelAllowance ?? (emp?.travelAllowance ?? 2000);
+  const totalGross = gross + mob + trv;
 
   // Auto generate reference number when staff or type changes
   useEffect(() => {
@@ -132,7 +160,7 @@ export const OfficialLettersModule: React.FC<OfficialLettersModuleProps> = ({
       issueDate,
       issuedBy: company.signatoryName || 'HR Admin & Legal Division',
       addressedTo: selectedType === 'bank_account_opening' ? addressedToBank : undefined,
-      purpose: selectedType === 'salary_certificate' ? purposeOfCertificate : undefined,
+      purpose: undefined,
       appointmentCategory: selectedType === 'appointment_letter' ? appointmentCategory : undefined,
     };
 
@@ -206,6 +234,25 @@ export const OfficialLettersModule: React.FC<OfficialLettersModuleProps> = ({
               >
                 {savedSuccess ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
                 <span>{savedSuccess ? 'Saved to Profile!' : 'Save to Profile'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById('printable-official-letter');
+                  if (el) {
+                    exportOfficialLetterToDocx(
+                      el.innerHTML,
+                      getLetterTitle(selectedType, appointmentCategory),
+                      emp?.fullName || 'Staff'
+                    );
+                  }
+                }}
+                className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
+                title="Download Letter as Microsoft Word (.docx) document"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Download .DOCX</span>
               </button>
 
               <button
@@ -451,18 +498,6 @@ export const OfficialLettersModule: React.FC<OfficialLettersModuleProps> = ({
                 />
               </div>
             )}
-
-            {selectedType === 'salary_certificate' && (
-              <div className="pt-2 border-t border-slate-100 text-xs">
-                <label className="block text-slate-600 font-semibold mb-1">Purpose of Certificate Request:</label>
-                <input
-                  type="text"
-                  value={purposeOfCertificate}
-                  onChange={(e) => setPurposeOfCertificate(e.target.value)}
-                  className="w-full p-2 border border-slate-200 rounded-xl"
-                />
-              </div>
-            )}
           </div>
 
           {/* Printable Letter Sheet (A4 Styled) */}
@@ -543,7 +578,7 @@ export const OfficialLettersModule: React.FC<OfficialLettersModuleProps> = ({
                         <td className="p-2.5 font-bold">Nature of Cadre</td>
                         <td className="p-2.5">
                           {appointmentCategory === 'Permanent' && 'Permanent Full-time post under organizational personnel cadre'}
-                          {appointmentCategory === 'Contractual' && `Contractual Project post under grant: "${emp?.assignedProject}"`}
+                          {appointmentCategory === 'Contractual' && (emp?.assignedProject ? `Contractual Project post (${emp.assignedProject})` : 'Contractual Project post')}
                           {appointmentCategory === 'Permanent Volunteer' && 'Dedicated Permanent Volunteer & Child Protection Field Service'}
                         </td>
                       </tr>
@@ -560,11 +595,11 @@ export const OfficialLettersModule: React.FC<OfficialLettersModuleProps> = ({
                         <td className="p-2.5 font-mono font-bold text-indigo-900">
                           {appointmentCategory === 'Permanent Volunteer' ? (
                             <span>
-                              {formatCurrency(emp?.grossSalary || 15000, company.currencySymbol)} (Plus Mobile: {formatCurrency(emp?.mobileAllowance || 1000, company.currencySymbol)}, Field Travel & Food: {formatCurrency(emp?.travelAllowance || 2000, company.currencySymbol)})
+                              {formatCurrency(gross || 15000, company.currencySymbol)} (Plus Mobile: {formatCurrency(mob, company.currencySymbol)}, Field Travel & Food: {formatCurrency(trv, company.currencySymbol)})
                             </span>
                           ) : (
                             <span>
-                              {formatCurrency(emp?.grossSalary || 50000, company.currencySymbol)} (Plus Mobile: {formatCurrency(emp?.mobileAllowance || 1000, company.currencySymbol)}, Travel: {formatCurrency(emp?.travelAllowance || 2000, company.currencySymbol)})
+                              {formatCurrency(gross, company.currencySymbol)} (Plus Mobile: {formatCurrency(mob, company.currencySymbol)}, Travel: {formatCurrency(trv, company.currencySymbol)})
                             </span>
                           )}
                         </td>
@@ -603,7 +638,7 @@ export const OfficialLettersModule: React.FC<OfficialLettersModuleProps> = ({
 
                 <p className="text-slate-800 text-justify text-xs">
                   {appointmentCategory === 'Permanent' && 'Separation by either party requires one (1) month written notice or gross salary in lieu thereof.'}
-                  {appointmentCategory === 'Contractual' && 'This contract is valid for the project cycle and renewable upon mutual agreement and donor funding.'}
+                  {appointmentCategory === 'Contractual' && 'This contract is valid for the designated project duration and renewable upon mutual agreement.'}
                   {appointmentCategory === 'Permanent Volunteer' && 'Voluntary transition requires fifteen (15) days mutual notice to ensure continuous care of shelter children.'}
                 </p>
 
@@ -630,7 +665,7 @@ export const OfficialLettersModule: React.FC<OfficialLettersModuleProps> = ({
                   )}
                   {appointmentCategory === 'Contractual' && (
                     <span>
-                      This is to officially certify that <strong>{emp?.fullName}</strong> (Staff ID: <strong>{emp?.id}</strong>) was engaged as a project contractual staff of <strong>{company.name}</strong> from <strong>{emp?.joiningDate}</strong> to <strong>{emp?.status === 'Separated' ? (emp.separationDate || 'October 2026') : 'present'}</strong> under the development project <em>"{emp?.assignedProject}"</em>.
+                      This is to officially certify that <strong>{emp?.fullName}</strong> (Staff ID: <strong>{emp?.id}</strong>) was engaged as a project contractual staff of <strong>{company.name}</strong> from <strong>{emp?.joiningDate}</strong> to <strong>{emp?.status === 'Separated' ? (emp.separationDate || 'October 2026') : 'present'}</strong>.
                     </span>
                   )}
                   {appointmentCategory === 'Permanent Volunteer' && (
@@ -641,7 +676,7 @@ export const OfficialLettersModule: React.FC<OfficialLettersModuleProps> = ({
                 </p>
 
                 <p className="text-slate-800 text-justify">
-                  During this tenure, {emp?.gender === 'Female' ? 'she' : 'he'} served as <strong>{emp?.designation}</strong> in our <strong>{emp?.department}</strong> wing, stationed at <strong>{emp?.workStation}</strong>, actively delivering assignments under the project <em>"{emp?.assignedProject}"</em>.
+                  During this tenure, {emp?.gender === 'Female' ? 'she' : 'he'} served as <strong>{emp?.designation}</strong> in our <strong>{emp?.department}</strong> wing, stationed at <strong>{emp?.workStation}</strong>, actively delivering assignments and responsibilities with high dedication.
                 </p>
 
                 <p className="text-slate-800 text-justify">
@@ -668,7 +703,7 @@ export const OfficialLettersModule: React.FC<OfficialLettersModuleProps> = ({
                     <span>This is to certify that <strong>{emp?.fullName}</strong> (Staff ID: <strong>{emp?.id}</strong>) is a permanent employee in regular cadre of <strong>{company.name}</strong>, currently serving as <strong>{emp?.designation}</strong> in the Department of <strong>{emp?.department}</strong>.</span>
                   )}
                   {appointmentCategory === 'Contractual' && (
-                    <span>This is to certify that <strong>{emp?.fullName}</strong> (Staff ID: <strong>{emp?.id}</strong>) is a contractual project employee of <strong>{company.name}</strong>, serving as <strong>{emp?.designation}</strong> under grant <em>"{emp?.assignedProject}"</em>.</span>
+                    <span>This is to certify that <strong>{emp?.fullName}</strong> (Staff ID: <strong>{emp?.id}</strong>) is a contractual project employee of <strong>{company.name}</strong>, serving as <strong>{emp?.designation}</strong> in the Department of <strong>{emp?.department}</strong>.</span>
                   )}
                   {appointmentCategory === 'Permanent Volunteer' && (
                     <span>This is to certify that <strong>{emp?.fullName}</strong> (Volunteer ID: <strong>{emp?.id}</strong>) is an honorary permanent volunteer of <strong>{company.name}</strong>, serving as <strong>{emp?.designation}</strong> in voluntary child protection operations.</span>
@@ -685,20 +720,20 @@ export const OfficialLettersModule: React.FC<OfficialLettersModuleProps> = ({
                   <div className="p-4 bg-slate-50 rounded-xl border border-slate-300 max-w-lg mx-auto text-xs space-y-2">
                     <div className="flex justify-between border-b border-slate-200 pb-1">
                       <span>Monthly Volunteer Honorarium (মাসিক সম্মানী ভাতা):</span>
-                      <span className="font-mono font-semibold">{formatCurrency(emp?.grossSalary || 15000, company.currencySymbol)}</span>
+                      <span className="font-mono font-semibold">{formatCurrency(gross || 15000, company.currencySymbol)}</span>
                     </div>
                     <div className="flex justify-between border-b border-slate-200 pb-1">
                       <span>Field Food & Subsistence Stipend (মাঠপর্যায় খোরাকি ও যাতায়াত ভাতা):</span>
-                      <span className="font-mono font-semibold">{formatCurrency(emp?.travelAllowance || 2000, company.currencySymbol)}</span>
+                      <span className="font-mono font-semibold">{formatCurrency(trv, company.currencySymbol)}</span>
                     </div>
                     <div className="flex justify-between border-b border-slate-200 pb-1">
                       <span>Communication Allowance (মোবাইল ও যোগাযোগ ভাতা):</span>
-                      <span className="font-mono font-semibold">{formatCurrency(emp?.mobileAllowance || 1000, company.currencySymbol)}</span>
+                      <span className="font-mono font-semibold">{formatCurrency(mob, company.currencySymbol)}</span>
                     </div>
                     <div className="flex justify-between font-bold text-slate-900 pt-1 text-sm">
                       <span>Total Monthly Volunteer Disbursement:</span>
                       <span className="font-mono text-indigo-700">
-                        {formatCurrency((emp?.grossSalary || 15000) + (emp?.mobileAllowance || 1000) + (emp?.travelAllowance || 2000), company.currencySymbol)}
+                        {formatCurrency((gross || 15000) + mob + trv, company.currencySymbol)}
                       </span>
                     </div>
                   </div>
@@ -706,40 +741,36 @@ export const OfficialLettersModule: React.FC<OfficialLettersModuleProps> = ({
                   <div className="p-4 bg-slate-50 rounded-xl border border-slate-300 max-w-lg mx-auto text-xs space-y-2">
                     <div className="flex justify-between border-b border-slate-200 pb-1">
                       <span>Basic Salary (মূল বেতন):</span>
-                      <span className="font-mono font-semibold">{formatCurrency(emp?.basicSalary || 25000, company.currencySymbol)}</span>
+                      <span className="font-mono font-semibold">{formatCurrency(basic, company.currencySymbol)}</span>
                     </div>
                     <div className="flex justify-between border-b border-slate-200 pb-1">
                       <span>House Rent Allowance (বাড়ি ভাড়া):</span>
-                      <span className="font-mono font-semibold">{formatCurrency(emp?.houseRent || 12500, company.currencySymbol)}</span>
+                      <span className="font-mono font-semibold">{formatCurrency(house, company.currencySymbol)}</span>
                     </div>
                     <div className="flex justify-between border-b border-slate-200 pb-1">
                       <span>Medical Allowance (চিকিৎসা ভাতা):</span>
-                      <span className="font-mono font-semibold">{formatCurrency(emp?.medicalAllowance || 5000, company.currencySymbol)}</span>
+                      <span className="font-mono font-semibold">{formatCurrency(med, company.currencySymbol)}</span>
                     </div>
                     <div className="flex justify-between border-b border-slate-200 pb-1">
                       <span>Conveyance Allowance (যাতায়াত ভাতা):</span>
-                      <span className="font-mono font-semibold">{formatCurrency(emp?.conveyanceAllowance || 5000, company.currencySymbol)}</span>
+                      <span className="font-mono font-semibold">{formatCurrency(conv, company.currencySymbol)}</span>
                     </div>
                     <div className="flex justify-between border-b border-slate-200 pb-1">
                       <span>Mobile Phone Allowance (মোবাইল ভাতা):</span>
-                      <span className="font-mono font-semibold">{formatCurrency(emp?.mobileAllowance || 1000, company.currencySymbol)}</span>
+                      <span className="font-mono font-semibold">{formatCurrency(mob, company.currencySymbol)}</span>
                     </div>
                     <div className="flex justify-between border-b border-slate-200 pb-1">
                       <span>Travel / Field Mission Allowance (ভ্রমণ ভাতা):</span>
-                      <span className="font-mono font-semibold">{formatCurrency(emp?.travelAllowance || 2000, company.currencySymbol)}</span>
+                      <span className="font-mono font-semibold">{formatCurrency(trv, company.currencySymbol)}</span>
                     </div>
                     <div className="flex justify-between font-bold text-slate-900 pt-1 text-sm">
                       <span>Total Monthly Gross Remuneration:</span>
                       <span className="font-mono text-indigo-700">
-                        {formatCurrency((emp?.grossSalary || 50000) + (emp?.mobileAllowance || 1000) + (emp?.travelAllowance || 2000), company.currencySymbol)}
+                        {formatCurrency(totalGross, company.currencySymbol)}
                       </span>
                     </div>
                   </div>
                 )}
-
-                <p className="text-slate-800 text-xs">
-                  This certificate has been issued upon the employee's request for <strong>{purposeOfCertificate}</strong>.
-                </p>
               </div>
             )}
 

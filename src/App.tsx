@@ -19,6 +19,7 @@ import {
   GovernmentHoliday
 } from './types/hris';
 import { OFFICIAL_BANGLADESH_HOLIDAYS_2026 } from './data/bangladeshHolidays';
+import { getMonthHolidayMetrics } from './utils/calculations';
 import { 
   INITIAL_COMPANY_PROFILE, 
   INITIAL_EMPLOYEES, 
@@ -623,6 +624,7 @@ export default function App() {
 
   const handleGeneratePayrollBatch = (month: string, monthKey: string) => {
     const activeStaff = employees.filter((e) => e.status !== 'Terminated' && e.status !== 'Separated');
+    const monthMetrics = getMonthHolidayMetrics(monthKey, holidays);
     const newRecords: PayrollRecord[] = activeStaff.map((emp) => {
       const gross = emp.grossSalary;
       const mobile = emp.mobileAllowance ?? 1000;
@@ -673,6 +675,10 @@ export default function App() {
         totalDeductions: totalDed,
         netSalary: net,
         paymentStatus: 'Paid',
+        govtHolidays: monthMetrics.govtHolidaysCount,
+        totalDaysInMonth: monthMetrics.totalDays,
+        totalWorkingDays: monthMetrics.workingDays,
+        weekends: monthMetrics.weekendCount,
         disbursementDate: new Date().toISOString().split('T')[0],
       };
     });
@@ -883,6 +889,7 @@ export default function App() {
                 currentUser={currentUser}
                 currentRole={currentRole}
                 jobLocations={jobLocations}
+                holidays={holidays}
                 onAddAttendance={handleAddAttendance}
                 onUpdateAttendance={handleUpdateAttendance}
               />
@@ -895,6 +902,7 @@ export default function App() {
                 currentUser={currentUser}
                 currentRole={currentRole}
                 jobLocations={jobLocations}
+                holidays={holidays}
                 onAddTimesheet={handleAddTimesheet}
                 onUpdateTimesheet={handleUpdateTimesheet}
               />
@@ -942,6 +950,7 @@ export default function App() {
                 company={company}
                 currentRole={currentRole}
                 currentUser={currentUser}
+                holidays={holidays}
                 onGeneratePayrollBatch={handleGeneratePayrollBatch}
                 onUpdatePayrollStatus={(id, status) => {
                   const updated = payroll.map((p) =>
@@ -1017,6 +1026,7 @@ export default function App() {
               <OfficialLettersModule
                 employees={employees}
                 company={company}
+                payroll={payroll}
                 initialLetterType={letterDraftType}
                 initialEmployee={letterDraftEmployee}
                 issuedLetters={issuedLetters}

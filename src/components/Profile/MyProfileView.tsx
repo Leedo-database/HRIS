@@ -480,8 +480,8 @@ export const MyProfileView: React.FC<MyProfileViewProps> = ({
                   <span className="font-bold text-slate-900 mt-0.5 block">{formData.workStation || 'Head Office'}</span>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 sm:col-span-2">
-                  <span className="text-[10px] text-slate-400 font-semibold block uppercase">Assigned Project / Donor</span>
-                  <span className="font-bold text-slate-900 mt-0.5 block">{formData.assignedProject || 'LEEDO Child Welfare Fund'}</span>
+                  <span className="text-[10px] text-slate-400 font-semibold block uppercase">Assigned Project / Program</span>
+                  <span className="font-bold text-slate-900 mt-0.5 block">{formData.assignedProject || 'General / Core Programs'}</span>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
                   <span className="text-[10px] text-slate-400 font-semibold block uppercase">Employment Status</span>

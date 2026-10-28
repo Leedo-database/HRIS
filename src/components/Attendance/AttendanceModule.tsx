@@ -26,7 +26,9 @@ import {
   Moon,
   Zap
 } from 'lucide-react';
-import { getTodayAttendanceSummary } from '../../utils/calculations';
+import { getTodayAttendanceSummary, getHolidayOnDate } from '../../utils/calculations';
+import { GovernmentHoliday } from '../../types/hris';
+import { OFFICIAL_BANGLADESH_HOLIDAYS_2026 } from '../../data/bangladeshHolidays';
 import { BiometricImportModal } from './BiometricImportModal';
 import { GoogleMapModal } from './GoogleMapModal';
 
@@ -39,6 +41,7 @@ interface AttendanceModuleProps {
   currentUser: Employee;
   currentRole: UserRole;
   jobLocations?: string[];
+  holidays?: GovernmentHoliday[];
 }
 
 // Verified physical coordinates for all official LEEDO centers in Dhaka & surrounding areas
@@ -119,6 +122,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
   currentUser,
   currentRole,
   jobLocations = [...LEEDO_JOB_LOCATIONS],
+  holidays = OFFICIAL_BANGLADESH_HOLIDAYS_2026,
 }) => {
   // Live dynamic current date
   const todayStr = new Date().toISOString().split('T')[0];
@@ -231,6 +235,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
   );
 
   const todaySummary = getTodayAttendanceSummary(employees, attendance, selectedViewDate);
+  const holidayOnViewDate = getHolidayOnDate(selectedViewDate || todayStr, holidays);
 
   // Helper to safely parse time strings into minutes from midnight
   const parseTimeToMinutes = (tStr: string): number => {
@@ -506,6 +511,46 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
           </div>
         )}
       </div>
+
+      {/* Official Bangladesh Government Holiday Banner */}
+      {holidayOnViewDate && (
+        <div className="bg-gradient-to-r from-teal-500/10 via-emerald-500/15 to-indigo-500/10 border-2 border-teal-500/40 p-4 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="p-2.5 bg-teal-600 text-white rounded-2xl shadow-sm shrink-0">
+              <Calendar className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-teal-700 text-white shadow-2xs">
+                  Official Government Holiday (সরকারি সাধারণ ছুটি)
+                </span>
+                <span className="text-xs font-bold text-teal-900 bg-teal-100/80 px-2 py-0.5 rounded-md border border-teal-200">
+                  {holidayOnViewDate.type}
+                </span>
+                <span className="text-xs font-mono font-semibold text-slate-500">
+                  {holidayOnViewDate.startDate} {holidayOnViewDate.startDate !== holidayOnViewDate.endDate ? `to ${holidayOnViewDate.endDate}` : ''}
+                </span>
+              </div>
+              <h3 className="font-extrabold text-base sm:text-lg text-slate-900 mt-1">
+                {holidayOnViewDate.titleBangla || holidayOnViewDate.title}
+                {holidayOnViewDate.titleBangla && (
+                  <span className="text-xs text-slate-500 font-normal ml-2">({holidayOnViewDate.title})</span>
+                )}
+              </h3>
+              <p className="text-xs text-slate-600 mt-0.5">
+                {holidayOnViewDate.description} • Gazetted Public Holiday (100% Paid Day Off for all staff as per Bangladesh Labor Act)
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+            <span className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5">
+              <Check className="w-3.5 h-3.5" />
+              <span>Paid Holiday (বেতনভুক্ত ছুটি)</span>
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Top Interactive Punch Console & Today's Summary */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">

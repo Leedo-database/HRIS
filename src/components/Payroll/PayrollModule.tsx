@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Employee, PayrollRecord, CompanyProfile, UserRole } from '../../types/hris';
+import { Employee, PayrollRecord, CompanyProfile, UserRole, GovernmentHoliday } from '../../types/hris';
+import { OFFICIAL_BANGLADESH_HOLIDAYS_2026 } from '../../data/bangladeshHolidays';
 import { 
   CreditCard, 
   Printer, 
@@ -17,9 +18,12 @@ import {
   Search,
   AlertCircle,
   Sparkles,
-  ArrowRight
+  ArrowRight,
+  FileText,
+  CalendarCheck2
 } from 'lucide-react';
-import { formatCurrency, numberToWords } from '../../utils/calculations';
+import { formatCurrency, numberToWords, getMonthHolidayMetrics } from '../../utils/calculations';
+import { exportPayslipToDocx } from '../../utils/docxExport';
 
 interface PayrollModuleProps {
   payroll: PayrollRecord[];
@@ -27,6 +31,7 @@ interface PayrollModuleProps {
   company: CompanyProfile;
   currentRole: UserRole;
   currentUser: Employee;
+  holidays?: GovernmentHoliday[];
   onGeneratePayrollBatch: (month: string, monthKey: string) => void;
   onUpdatePayrollStatus: (id: string, status: 'Paid' | 'Processing') => void;
   onUpdateEmployee?: (employee: Employee) => void;
@@ -47,6 +52,7 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
   company,
   currentRole,
   currentUser,
+  holidays = OFFICIAL_BANGLADESH_HOLIDAYS_2026,
   onGeneratePayrollBatch,
   onUpdatePayrollStatus,
   onUpdateEmployee = () => {},
@@ -56,6 +62,9 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
   const [activePayslip, setActivePayslip] = useState<PayrollRecord | null>(null);
   const [showBankAdvice, setShowBankAdvice] = useState(false);
   const [activeSubTab, setActiveSubTab] = useState<'register' | 'salary_setup'>('register');
+
+  // Month holiday metrics for labor compliance calculation
+  const monthMetrics = getMonthHolidayMetrics(selectedMonthKey, holidays);
 
   // Salary Setup Modal state
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
@@ -310,6 +319,68 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
       {/* SUB-TAB 1: SALARY REGISTER & PAYSLIPS */}
       {activeSubTab === 'register' && (
         <div className="space-y-6">
+          {/* Bangladesh Labor Act & Gazetted Holiday Statutory Card */}
+          <div className="bg-gradient-to-r from-emerald-950 via-slate-900 to-indigo-950 text-white rounded-2xl p-4 sm:p-5 shadow-xs border border-emerald-500/20">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center shrink-0 text-emerald-300">
+                  <CalendarCheck2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="font-bold text-sm sm:text-base text-white">
+                      Statutory Working Days & Government Holidays ({selectedMonth})
+                    </h4>
+                    <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-400/30">
+                      বাংলাদেশ শ্রম আইন ২০০৬ ও সরকারি গেজেট অনুমোদিত
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-0.5">
+                    সকল সরকারি গেজেটেড ছুটি ও সাপ্তাহিক ছুটি ১০০% পূর্ণ বেতনে প্রদেয় (No wage deductions for gazetted public holidays).
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 sm:gap-3 shrink-0 flex-wrap">
+                <div className="bg-white/10 px-3 py-1.5 rounded-xl border border-white/10 text-center min-w-[70px]">
+                  <span className="text-[10px] text-slate-300 block uppercase font-medium">Calendar</span>
+                  <span className="text-sm sm:text-base font-bold text-white font-mono">{monthMetrics.totalDays} Days</span>
+                </div>
+                <div className="bg-white/10 px-3 py-1.5 rounded-xl border border-white/10 text-center min-w-[70px]">
+                  <span className="text-[10px] text-slate-300 block uppercase font-medium">Working</span>
+                  <span className="text-sm sm:text-base font-bold text-emerald-300 font-mono">{monthMetrics.workingDays} Days</span>
+                </div>
+                <div className="bg-emerald-500/20 px-3 py-1.5 rounded-xl border border-emerald-400/40 text-center min-w-[70px]">
+                  <span className="text-[10px] text-emerald-200 block uppercase font-bold">Govt Holidays</span>
+                  <span className="text-sm sm:text-base font-bold text-emerald-300 font-mono">{monthMetrics.govtHolidaysCount} Days</span>
+                </div>
+                <div className="bg-white/10 px-3 py-1.5 rounded-xl border border-white/10 text-center min-w-[70px]">
+                  <span className="text-[10px] text-slate-300 block uppercase font-medium">Weekends</span>
+                  <span className="text-sm sm:text-base font-bold text-slate-200 font-mono">{monthMetrics.weekendCount} Days</span>
+                </div>
+              </div>
+            </div>
+
+            {monthMetrics.uniqueHolidays.length > 0 ? (
+              <div className="mt-3 pt-3 border-t border-white/10 flex items-center gap-2 flex-wrap text-[11px]">
+                <span className="text-slate-300 font-semibold">Gazetted Holidays in {selectedMonth}:</span>
+                {monthMetrics.uniqueHolidays.map((h) => (
+                  <span key={h.id} className="bg-white/10 hover:bg-white/15 px-2.5 py-0.5 rounded-lg border border-white/15 text-slate-200 inline-flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                    <strong>{h.title} {h.titleBangla ? `(${h.titleBangla})` : ''}</strong>
+                    <span className="text-[10px] text-emerald-300 font-mono">
+                      ({h.startDate === h.endDate ? h.startDate : `${h.startDate} to ${h.endDate}`} • {h.daysCount}d paid)
+                    </span>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-2 text-[11px] text-slate-400">
+                No gazetted public holidays in this month. Standard working days applicable.
+              </div>
+            )}
+          </div>
+
           {/* Summary KPI Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
@@ -396,6 +467,7 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
                       <th className="py-3 px-4">Staff Member</th>
                       <th className="py-3 px-3">Designation & Station</th>
                       <th className="py-3 px-3">Gross Salary</th>
+                      <th className="py-3 px-3">Days & Holidays</th>
                       <th className="py-3 px-3">Allowances (Mob+Trv)</th>
                       <th className="py-3 px-3">Advance Ded</th>
                       <th className="py-3 px-3">PF (8%) + Tax</th>
@@ -417,6 +489,15 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
                         </td>
                         <td className="py-3 px-3 font-semibold text-slate-900 font-mono">
                           {formatCurrency(item.grossSalary, company.currencySymbol)}
+                        </td>
+                        <td className="py-3 px-3 text-slate-700 font-mono text-[11px]">
+                          <div className="font-semibold text-slate-800">
+                            {item.totalWorkingDays ?? monthMetrics.workingDays}w / {item.totalDaysInMonth ?? monthMetrics.totalDays}d
+                          </div>
+                          <span className="inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-50 text-teal-800 border border-teal-200 whitespace-nowrap">
+                            <CalendarCheck2 className="w-2.5 h-2.5 text-teal-600" />
+                            {item.govtHolidays ?? monthMetrics.govtHolidaysCount}d Hol (Paid)
+                          </span>
                         </td>
                         <td className="py-3 px-3 text-slate-600 font-mono">
                           {formatCurrency((item.mobileAllowance || 0) + (item.travelAllowance || 0), company.currencySymbol)}
@@ -448,7 +529,22 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
                             {item.paymentStatus}
                           </button>
                         </td>
-                        <td className="py-3 px-4 text-right">
+                        <td className="py-3 px-4 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              exportPayslipToDocx(
+                                item,
+                                company,
+                                employees.find((e) => e.id === item.employeeId)
+                              )
+                            }
+                            className="text-blue-700 hover:text-blue-900 font-bold text-xs inline-flex items-center gap-1 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg border border-blue-200 transition-colors cursor-pointer mr-1.5 shadow-2xs"
+                            title="Download Payslip as Microsoft Word (.docx) file"
+                          >
+                            <FileText className="w-3 h-3 text-blue-600" />
+                            <span>.DOCX</span>
+                          </button>
                           <button
                             onClick={() => setActivePayslip(item)}
                             className="text-indigo-600 hover:text-indigo-800 font-bold text-xs inline-flex items-center gap-1 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg border border-indigo-200 transition-colors cursor-pointer"
@@ -892,6 +988,21 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
               <span className="font-bold text-sm">Official Employee Payslip Preview</span>
               <div className="flex items-center gap-2">
                 <button
+                  type="button"
+                  onClick={() =>
+                    exportPayslipToDocx(
+                      activePayslip,
+                      company,
+                      employees.find((e) => e.id === activePayslip.employeeId)
+                    )
+                  }
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
+                  title="Download Payslip as Microsoft Word (.docx) document"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Download .DOCX</span>
+                </button>
+                <button
                   onClick={handlePrintPayslip}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-2xs cursor-pointer"
                 >
@@ -945,6 +1056,44 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
                     {activePayslip.paymentStatus}
                   </span>
                 </div>
+              </div>
+
+              {/* Attendance & Gazetted Government Holiday Reconciliation */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CalendarCheck2 className="w-4 h-4 text-emerald-600" />
+                    <span className="font-bold text-slate-900 text-xs">
+                      Attendance & Statutory Holiday Compliance (উপস্থিতি ও সরকারি ছুটি সমন্বয়)
+                    </span>
+                  </div>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-200">
+                    শ্রম আইন ২০০৬ অনুযায়ী ১০০% প্রদেয়
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center pt-1 font-mono">
+                  <div className="bg-white p-2 rounded-lg border border-slate-200">
+                    <span className="text-[10px] text-slate-500 block">Total Days in Month</span>
+                    <span className="font-bold text-slate-900 text-sm">{activePayslip.totalDaysInMonth ?? monthMetrics.totalDays} Days</span>
+                  </div>
+                  <div className="bg-white p-2 rounded-lg border border-slate-200">
+                    <span className="text-[10px] text-slate-500 block">Standard Working Days</span>
+                    <span className="font-bold text-slate-900 text-sm">{activePayslip.totalWorkingDays ?? monthMetrics.workingDays} Days</span>
+                  </div>
+                  <div className="bg-teal-50/80 p-2 rounded-lg border border-teal-200 text-teal-900">
+                    <span className="text-[10px] text-teal-700 block font-semibold">Govt Holidays (Paid)</span>
+                    <span className="font-black text-teal-800 text-sm">{activePayslip.govtHolidays ?? monthMetrics.govtHolidaysCount} Days</span>
+                  </div>
+                  <div className="bg-white p-2 rounded-lg border border-slate-200">
+                    <span className="text-[10px] text-slate-500 block">Weekly Rest Days</span>
+                    <span className="font-bold text-slate-900 text-sm">{activePayslip.weekends ?? monthMetrics.weekendCount} Days</span>
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-slate-500 italic">
+                  * বাংলাদেশ গেজেট অনুযায়ী সকল জাতীয় ও ধর্মীয় সরকারি ছুটির দিন সম্পূর্ণ বেতনভুক্ত হিসেবে গণ্য হয়েছে। কোনো প্রকার বেতন কর্তন করা হয়নি।
+                </p>
               </div>
 
               {/* Earnings & Deductions Table */}
