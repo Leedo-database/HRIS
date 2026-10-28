@@ -133,11 +133,11 @@ export function loadMergedEmployees(): Employee[] {
   }
 }
 
-// Check if v5.0 migration is needed (clears any non-LEEDO test mock records from all storage keys)
+// Check if v6.0 migration is needed (clears any non-LEEDO test mock records and purges separated user 1006)
 export function ensureV2Migration(): void {
   try {
     const migrated = localStorage.getItem(STORAGE_KEYS.MIGRATION_VERSION);
-    if (migrated !== '5.0') {
+    if (migrated !== '6.0') {
       // 1. Purge & load authentic employees
       loadMergedEmployees();
 
@@ -211,13 +211,26 @@ export function ensureV2Migration(): void {
         } catch { /* ignore */ }
       }
 
-      // 7. Clean current user if logged into legacy mock ID
+      // 7. Clean current user if logged into legacy mock ID or separated staff like 1006 (Rashed)
       const curUserId = localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID);
-      if (curUserId && (!isValidLeedoStaffId(curUserId) || LEGACY_MOCK_IDS.has(curUserId))) {
-        localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, '1006'); // Md. Rashedul Hasan (HR & Admin Officer)
+      if (!curUserId || curUserId === '1006' || !isValidLeedoStaffId(curUserId) || LEGACY_MOCK_IDS.has(curUserId)) {
+        localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, '1057'); // Md. Omar Faruque (Manager HR & Admin)
       }
 
-      localStorage.setItem(STORAGE_KEYS.MIGRATION_VERSION, '5.0');
+      // 8. Also ensure stored company profile has the active HR signatory
+      const rawCompany = localStorage.getItem(STORAGE_KEYS.COMPANY);
+      if (rawCompany) {
+        try {
+          const comp = JSON.parse(rawCompany);
+          comp.hrSignatoryName = 'Md. Omar Faruque';
+          comp.hrSignatoryDesignation = 'Manager HR & Admin';
+          comp.signatoryName = 'Forhad Hossain';
+          comp.signatoryDesignation = 'Founder & Executive Director';
+          localStorage.setItem(STORAGE_KEYS.COMPANY, JSON.stringify(comp));
+        } catch { /* ignore */ }
+      }
+
+      localStorage.setItem(STORAGE_KEYS.MIGRATION_VERSION, '6.0');
     }
   } catch (e) {
     console.error('Migration check failed:', e);

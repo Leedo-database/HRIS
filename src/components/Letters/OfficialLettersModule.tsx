@@ -46,7 +46,9 @@ export const OfficialLettersModule: React.FC<OfficialLettersModuleProps> = ({
   const [activeView, setActiveView] = useState<'generator' | 'archive'>('generator');
   const [selectedType, setSelectedType] = useState<LetterType>(initialLetterType);
   const [selectedStaffId, setSelectedStaffId] = useState(
-    initialEmployee ? initialEmployee.id : employees[0]?.id || '1001'
+    initialEmployee && (['experience', 'separation_clearance', 'final_settlement'].includes(initialLetterType) || isEmployeeActive(initialEmployee))
+      ? initialEmployee.id 
+      : employees.find(isEmployeeActive)?.id || '1001'
   );
   
   // Staff Employment Cadre / Appointment Category
@@ -77,7 +79,19 @@ export const OfficialLettersModule: React.FC<OfficialLettersModuleProps> = ({
     }
   }, [initialLetterType]);
 
-  const emp = employees.find((e) => e.id === selectedStaffId) || employees[0];
+  // Ensure separated employees are automatically replaced by active staff if an active letter type is selected
+  useEffect(() => {
+    const isExitDoc = ['experience', 'separation_clearance', 'final_settlement'].includes(selectedType);
+    const currentEmp = employees.find((e) => e.id === selectedStaffId);
+    if (!isExitDoc && currentEmp && !isEmployeeActive(currentEmp)) {
+      const firstActive = employees.find(isEmployeeActive);
+      if (firstActive) {
+        setSelectedStaffId(firstActive.id);
+      }
+    }
+  }, [selectedType, selectedStaffId, employees]);
+
+  const emp = employees.find((e) => e.id === selectedStaffId) || employees.find(isEmployeeActive) || employees[0];
 
   // Latest calculated payroll record for this staff if available
   const latestPayroll = payroll?.find((p) => p.employeeId === emp?.id);
@@ -158,7 +172,9 @@ export const OfficialLettersModule: React.FC<OfficialLettersModuleProps> = ({
       employeeDesignation: emp.designation,
       employeeDepartment: emp.department,
       issueDate,
-      issuedBy: company.signatoryName || 'HR Admin & Legal Division',
+      issuedBy: company.hrSignatoryName
+        ? `${company.hrSignatoryName} (${company.hrSignatoryDesignation || 'Manager HR & Admin'})`
+        : company.signatoryName || 'HR Admin & Legal Division',
       addressedTo: selectedType === 'bank_account_opening' ? addressedToBank : undefined,
       purpose: undefined,
       appointmentCategory: selectedType === 'appointment_letter' ? appointmentCategory : undefined,
@@ -422,8 +438,9 @@ export const OfficialLettersModule: React.FC<OfficialLettersModuleProps> = ({
                       </option>
                     ))}
                   </optgroup>
-                  {employees.some((e) => !isEmployeeActive(e)) && (
-                    <optgroup label="Separated / Ex-Staff (অব্যাহতিপ্রাপ্ত কর্মী - Experience & Release Letters)">
+                  {/* Separated / Ex-Staff are ONLY accessible for Experience Certificates and Separation Clearance dockets */}
+                  {['experience', 'separation_clearance', 'final_settlement'].includes(selectedType) && employees.some((e) => !isEmployeeActive(e)) && (
+                    <optgroup label="Separated / Ex-Staff (অব্যাহতিপ্রাপ্ত কর্মী - Experience & Release Only)">
                       {employees.filter((e) => !isEmployeeActive(e)).map((e) => (
                         <option key={e.id} value={e.id}>
                           [{e.id}] {e.fullName} (Exited) — {e.designation}
@@ -868,8 +885,9 @@ export const OfficialLettersModule: React.FC<OfficialLettersModuleProps> = ({
 
               <div className="text-right flex flex-col items-end">
                 <div className="border-t border-slate-400 pt-1.5 w-48 text-center">
-                  <p className="font-bold text-slate-900">HR & Compliance Division</p>
-                  <p className="text-slate-500 text-[10px]">Verified Against Central Dossier</p>
+                  <p className="font-bold text-slate-900">{company.hrSignatoryName || 'Md. Omar Faruque'}</p>
+                  <p className="text-slate-600 text-[11px]">{company.hrSignatoryDesignation || 'Manager HR & Admin'}</p>
+                  <p className="text-slate-500 text-[10px]">HR & Compliance Division</p>
                 </div>
               </div>
             </div>

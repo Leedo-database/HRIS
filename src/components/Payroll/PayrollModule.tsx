@@ -1178,15 +1178,18 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
               <div className="pt-8 border-t border-slate-300 grid grid-cols-3 gap-6 text-center text-xs">
                 <div>
                   <div className="border-t border-slate-400 pt-1.5 font-semibold">Prepared By</div>
-                  <p className="text-[10px] text-slate-400">HR & Admin Officer</p>
+                  <p className="font-bold text-slate-900 text-[11px] mt-0.5">{company.hrSignatoryName || 'Md. Omar Faruque'}</p>
+                  <p className="text-[10px] text-slate-500">{company.hrSignatoryDesignation || 'Manager HR & Admin'}</p>
                 </div>
                 <div>
                   <div className="border-t border-slate-400 pt-1.5 font-semibold">Verified By</div>
-                  <p className="text-[10px] text-slate-400">Finance & Grants Lead</p>
+                  <p className="font-bold text-slate-900 text-[11px] mt-0.5">Murshida Akhter Kanta</p>
+                  <p className="text-[10px] text-slate-500">Director (Admin & Finance)</p>
                 </div>
                 <div>
                   <div className="border-t border-slate-400 pt-1.5 font-semibold">Approved By</div>
-                  <p className="text-[10px] text-slate-400">Executive Director / Signatory</p>
+                  <p className="font-bold text-slate-900 text-[11px] mt-0.5">{company.signatoryName || 'Forhad Hossain'}</p>
+                  <p className="text-[10px] text-slate-500">{company.signatoryDesignation || 'Executive Director'}</p>
                 </div>
               </div>
 

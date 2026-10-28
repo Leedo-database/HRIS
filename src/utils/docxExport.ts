@@ -265,8 +265,8 @@ export function exportPayslipToDocx(
     <tr>
       <td>
         <div class="sig-line"></div>
-        <p style="margin: 0; font-weight: bold;">Md. Rashedul Hasan</p>
-        <p style="margin: 2px 0 0 0; font-size: 9pt; color: #64748b;">HR & Admin Officer</p>
+        <p style="margin: 0; font-weight: bold;">${company.hrSignatoryName || 'Md. Omar Faruque'}</p>
+        <p style="margin: 2px 0 0 0; font-size: 9pt; color: #64748b;">${company.hrSignatoryDesignation || 'Manager HR & Admin'}</p>
       </td>
       <td>
         <div class="sig-line"></div>
@@ -275,8 +275,8 @@ export function exportPayslipToDocx(
       </td>
       <td>
         <div class="sig-line"></div>
-        <p style="margin: 0; font-weight: bold;">Forhad Hossain</p>
-        <p style="margin: 2px 0 0 0; font-size: 9pt; color: #64748b;">Executive Director</p>
+        <p style="margin: 0; font-weight: bold;">${company.signatoryName || 'Forhad Hossain'}</p>
+        <p style="margin: 2px 0 0 0; font-size: 9pt; color: #64748b;">${company.signatoryDesignation || 'Executive Director'}</p>
       </td>
     </tr>
   </table>

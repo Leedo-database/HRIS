@@ -475,6 +475,8 @@ export interface CompanyProfile {
   phone: string;
   signatoryName: string;
   signatoryDesignation: string;
+  hrSignatoryName?: string;
+  hrSignatoryDesignation?: string;
   currency: 'BDT (৳)' | 'USD ($)';
   currencySymbol: string;
   logoUrl?: string;

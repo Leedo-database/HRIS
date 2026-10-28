@@ -24,13 +24,15 @@ import {
   Check,
   AlertTriangle,
   Moon,
-  Zap
+  Zap,
+  Edit
 } from 'lucide-react';
 import { getTodayAttendanceSummary, getHolidayOnDate } from '../../utils/calculations';
 import { GovernmentHoliday } from '../../types/hris';
 import { OFFICIAL_BANGLADESH_HOLIDAYS_2026 } from '../../data/bangladeshHolidays';
 import { BiometricImportModal } from './BiometricImportModal';
 import { GoogleMapModal } from './GoogleMapModal';
+import { AttendanceCorrectionModal } from './AttendanceCorrectionModal';
 
 interface AttendanceModuleProps {
   employees: Employee[];
@@ -139,6 +141,8 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
   const [filterMode, setFilterMode] = useState<string>('All');
   const [filterLocation, setFilterLocation] = useState<string>('All');
   const [isBiometricModalOpen, setIsBiometricModalOpen] = useState(false);
+  const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
+  const [recordToCorrect, setRecordToCorrect] = useState<AttendanceRecord | null>(null);
   const [currentTime, setCurrentTime] = useState<string>('');
   const [isLocating, setIsLocating] = useState(false);
   const [selectedMapRecord, setSelectedMapRecord] = useState<AttendanceRecord | null>(null);
@@ -507,6 +511,20 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
             >
               <FileSpreadsheet className="w-4 h-4 text-indigo-200" />
               <span>Biometric / OCR Importer</span>
+            </button>
+
+            {/* Attendance Correction & Manual Entry Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setRecordToCorrect(null);
+                setIsCorrectionModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-xs transition-all cursor-pointer"
+              title="Manual attendance punch entry or correction with audit remark"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>+ Correction / Manual (সংশোধন)</span>
             </button>
           </div>
         )}
@@ -993,12 +1011,15 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
                 <th className="py-3.5 px-4">Duty Station</th>
                 <th className="py-3.5 px-4">Status & Hours</th>
                 <th className="py-3.5 px-4">GPS & Google Maps</th>
+                {currentRole === 'hr_admin' && (
+                  <th className="py-3.5 px-4 text-right">HR Audit</th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredAttendance.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-slate-400">
+                  <td colSpan={currentRole === 'hr_admin' ? 6 : 5} className="py-12 text-center text-slate-400">
                     <Clock className="w-8 h-8 mx-auto mb-2 text-slate-300" />
                     <p className="font-semibold text-sm text-slate-600">No attendance punches found</p>
                     <p className="text-xs text-slate-400 mt-1">
@@ -1090,6 +1111,23 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
                         <span className="text-[10px] text-slate-400">No GPS Record</span>
                       )}
                     </td>
+
+                    {currentRole === 'hr_admin' && (
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRecordToCorrect(rec);
+                            setIsCorrectionModalOpen(true);
+                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg border border-indigo-200 text-[11px] font-bold transition-all cursor-pointer"
+                          title="Correct attendance record"
+                        >
+                          <Edit className="w-3 h-3 text-indigo-600" />
+                          <span>Correct</span>
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
@@ -1111,8 +1149,27 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
         onClose={() => setIsBiometricModalOpen(false)}
         employees={employees}
         onImportRecords={(importedRecords) => {
-          importedRecords.forEach((r) => onAddAttendance(r));
+          handleBiometricImport(importedRecords);
           setIsBiometricModalOpen(false);
+        }}
+      />
+
+      {/* HR Attendance Correction Modal */}
+      <AttendanceCorrectionModal
+        isOpen={isCorrectionModalOpen}
+        onClose={() => {
+          setIsCorrectionModalOpen(false);
+          setRecordToCorrect(null);
+        }}
+        recordToEdit={recordToCorrect}
+        employees={employees}
+        jobLocations={jobLocations}
+        onSave={(record, isNew) => {
+          if (isNew) {
+            onAddAttendance(record);
+          } else {
+            onUpdateAttendance(record);
+          }
         }}
       />
     </div>

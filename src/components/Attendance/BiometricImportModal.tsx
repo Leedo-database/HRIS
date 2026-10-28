@@ -39,10 +39,24 @@ export interface ParsedAttendanceRow {
   clockOutTime?: string; // HH:mm:ss
   hoursWorked: number;
   status: 'Present' | 'Late' | 'Absent' | 'Field Mission';
+  lateMinutes?: number;
   matchedEmployee?: Employee;
   isValid: boolean;
   error?: string;
 }
+
+export const SAMPLE_PASTE_DATA = `Office\tMurshida Akhter Kanta\t2\t2026-10-06 09:54:12\tC/In\t1\t0\tFP
+Office\tMurshida Akhter Kanta\t2\t2026-10-06 18:05:40\tC/Out\t1\t0\tFP
+Office\tMd. Habibur Rahman\t3\t2026-10-06 10:38:22\tC/In\t1\t0\tFP
+Office\tMd. Habibur Rahman\t3\t2026-10-06 18:15:10\tC/Out\t1\t0\tFP
+Office\tMd. Belal Hossain\t4\t2026-10-06 10:52:05\tC/In\t1\t0\tFP
+Office\tMd. Belal Hossain\t4\t2026-10-06 18:02:15\tC/Out\t1\t0\tFP
+Office\tRayhan\t10\t2026-10-06 09:48:00\tC/In\t1\t0\tFP
+Office\tRayhan\t10\t2026-10-06 18:00:00\tC/Out\t1\t0\tFP
+Office\tFarhana\t19\t2026-10-06 10:29:10\tC/In\t1\t0\tFP
+Office\tFarhana\t19\t2026-10-06 18:10:00\tC/Out\t1\t0\tFP
+Office\tFabiha Mustari\t27\t2026-10-06 10:45:00\tC/In\t1\t0\tFP
+Office\tFabiha Mustari\t27\t2026-10-06 18:00:00\tC/Out\t1\t0\tFP`;
 
 // Known Enroll No. mapping for LEEDO staff based on the official biometric machine config
 const KNOWN_ENROLL_MAP: Record<string, string> = {
@@ -68,7 +82,7 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
   const [previewImage, setPreviewImage] = useState<string | null>('/assets/aistudio/image_fb194f19.png');
   const [isProcessingOcr, setIsProcessingOcr] = useState(false);
   const [ocrStatusMessage, setOcrStatusMessage] = useState<string>('');
-  const [filterUnmatchedOnly, setFilterUnmatchedOnly] = useState(false);
+  const [tableFilter, setTableFilter] = useState<'all' | 'late' | 'ontime' | 'unmatched'>('all');
   const [hasParsed, setHasParsed] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -128,147 +142,190 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
     return clean;
   };
 
-  // Parse Raw Biometric Machine Log Text (supporting both raw multi-punch and summary CSV)
+  // Tokenize line across tabs, commas, semicolons, pipes, or multiple spaces
+  const tokenizeLine = (line: string): string[] => {
+    const trimmed = line.trim();
+    if (!trimmed) return [];
+    if (trimmed.includes('\t')) {
+      return trimmed.split('\t').map((c) => c.replace(/^"|"$/g, '').trim()).filter((c) => c.length > 0);
+    }
+    if (trimmed.includes(',')) {
+      return trimmed.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map((c) => c.replace(/^"|"$/g, '').trim()).filter((c) => c.length > 0);
+    }
+    if (trimmed.includes(';')) {
+      return trimmed.split(';').map((c) => c.replace(/^"|"$/g, '').trim()).filter((c) => c.length > 0);
+    }
+    if (trimmed.includes('|')) {
+      return trimmed.split('|').map((c) => c.replace(/^"|"$/g, '').trim()).filter((c) => c.length > 0);
+    }
+    return trimmed.split(/\s{2,}/).map((c) => c.replace(/^"|"$/g, '').trim()).filter((c) => c.length > 0);
+  };
+
+  // Universal Biometric Machine Log Parser (Multi-Punch, Single Punch, CSV, and Tab Delimited)
   const processText = (content: string) => {
     if (!content || !content.trim()) return;
-    const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
-    if (lines.length === 0) return;
+    const rawLines = content.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+    if (rawLines.length === 0) return;
 
-    // Detect if this is the Raw Punch Log format:
-    // Department | Name | No. | Date/Time | Status | Location ID ...
-    const firstLine = lines[0].toLowerCase();
-    const isRawPunchLog = firstLine.includes('date/time') || firstLine.includes('no.') || firstLine.includes('c/in');
+    // Intermediate bucket for grouping punches by employee + date
+    const punchMap = new Map<string, {
+      rawNo: string;
+      rawName: string;
+      date: string;
+      times: string[];
+      rawStatus?: string;
+    }>();
 
-    if (isRawPunchLog) {
-      // Group raw punches by Employee + Date
-      const punchMap = new Map<string, {
-        rawNo: string;
-        rawName: string;
-        date: string;
-        times: string[];
-      }>();
+    for (let i = 0; i < rawLines.length; i++) {
+      const line = rawLines[i];
+      const lower = line.toLowerCase();
 
-      // Skip header if line 0 is header
-      const startIdx = (firstLine.includes('name') || firstLine.includes('department')) ? 1 : 0;
+      // Skip header lines
+      if (
+        (lower.includes('department') && lower.includes('name')) ||
+        (lower.includes('ac-no') && lower.includes('date')) ||
+        (lower.includes('employee id') && lower.includes('time'))
+      ) {
+        continue;
+      }
 
-      for (let i = startIdx; i < lines.length; i++) {
-        const line = lines[i];
-        const cols = line.includes('\t') ? line.split('\t') : line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-        if (cols.length < 4) continue;
+      const cols = tokenizeLine(line);
+      if (cols.length < 2) continue;
 
-        // In raw log: Col 0: Dept, Col 1: Name, Col 2: No, Col 3: Date/Time
-        const rawName = cols[1]?.replace(/^"|"$/g, '').trim() || '';
-        const rawNo = cols[2]?.replace(/^"|"$/g, '').trim() || '';
-        const rawDateTime = cols[3]?.replace(/^"|"$/g, '').trim() || '';
+      let foundDate = '';
+      let foundTimes: string[] = [];
+      let foundNo = '';
+      let foundName = '';
+      let foundStatus = '';
 
-        if (!rawDateTime) continue;
+      // Analyze each token
+      for (const col of cols) {
+        const colClean = col.trim();
 
-        const [datePart, timePart] = rawDateTime.split(/\s+/);
-        if (!datePart) continue;
+        // 1. Check for combined Date & Time (e.g. 01/09/2026 09:56:58 or 2026-10-06 10:35:00)
+        const combinedMatch = colClean.match(/^(\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4})\s+(\d{1,2}:\d{2}(?::\d{2})?)/);
+        if (combinedMatch) {
+          foundDate = normalizeDate(combinedMatch[1]);
+          foundTimes.push(combinedMatch[2]);
+          continue;
+        }
 
-        const normDate = normalizeDate(datePart);
-        const timeStr = timePart || '10:00:00';
+        // 2. Check for pure Date
+        const dateMatch = colClean.match(/^(\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4})$/);
+        if (dateMatch && !foundDate) {
+          foundDate = normalizeDate(dateMatch[1]);
+          continue;
+        }
 
-        const groupKey = `${rawNo}_${rawName}_${normDate}`;
-        if (!punchMap.has(groupKey)) {
-          punchMap.set(groupKey, {
-            rawNo,
-            rawName,
-            date: normDate,
-            times: [timeStr],
-          });
-        } else {
-          punchMap.get(groupKey)!.times.push(timeStr);
+        // 3. Check for Time (HH:mm:ss or HH:mm)
+        const timeMatch = colClean.match(/^(\d{1,2}:\d{2}(?::\d{2})?)$/);
+        if (timeMatch) {
+          foundTimes.push(timeMatch[1]);
+          continue;
+        }
+
+        // 4. Check for Machine Enroll No / Staff ID
+        if (/^\d{1,6}$/.test(colClean)) {
+          if (!foundNo) {
+            foundNo = colClean;
+          }
+          continue;
+        }
+
+        // 5. Check for Status keywords
+        const colLower = colClean.toLowerCase();
+        if (['c/in', 'c/out', 'in', 'out', 'fp', 'late', 'present', 'absent', 'office', 'head office'].includes(colLower)) {
+          if (colLower.includes('late') || colLower.includes('absent') || colLower.includes('in') || colLower.includes('out')) {
+            foundStatus = colClean;
+          }
+          continue;
+        }
+
+        // 6. Otherwise this is likely the Name
+        if (!foundName && /[a-zA-Z\u0980-\u09FF]/.test(colClean)) {
+          foundName = colClean;
         }
       }
 
-      // Now create aggregated rows from punch groups
-      const results: ParsedAttendanceRow[] = [];
-      punchMap.forEach((entry) => {
-        // Sort times ascending
-        const sortedTimes = [...entry.times].sort();
-        const clockIn = sortedTimes[0];
-        const clockOut = sortedTimes.length > 1 ? sortedTimes[sortedTimes.length - 1] : undefined;
+      // If no date found in row, default to current date
+      if (!foundDate) {
+        foundDate = new Date().toISOString().split('T')[0];
+      }
 
-        // Calculate hours worked if clockOut exists
-        let hoursWorked = 0;
-        if (clockIn && clockOut && clockIn !== clockOut) {
-          const [inH, inM] = clockIn.split(':').map(Number);
-          const [outH, outM] = clockOut.split(':').map(Number);
-          const diffMins = (outH * 60 + (outM || 0)) - (inH * 60 + (inM || 0));
-          hoursWorked = Math.max(0.5, Math.round((diffMins / 60) * 10) / 10);
-        } else if (clockIn) {
-          // Single punch: standard 8h or pending
-          hoursWorked = 8.0;
-        }
+      if (foundTimes.length === 0) {
+        foundTimes.push('10:00:00');
+      }
 
-        const matchedEmp = findMatchingEmployee(entry.rawNo, entry.rawName);
-
-        // Check if Late (after 10:15)
-        const [h, m] = clockIn.split(':').map(Number);
-        const isLate = (h * 60 + (m || 0)) > (10 * 60 + 15);
-
-        results.push({
-          rawAcNo: entry.rawNo,
-          rawName: entry.rawName,
-          normalizedDate: entry.date,
-          clockInTime: clockIn,
-          clockOutTime: clockOut,
-          hoursWorked,
-          status: isLate ? 'Late' : 'Present',
-          matchedEmployee: matchedEmp,
-          isValid: !!matchedEmp,
-          error: matchedEmp ? undefined : 'Unmatched Employee Name or ID',
+      // Group key: combination of ID/Name and Date
+      const groupKey = `${foundNo || foundName || 'unknown'}_${foundDate}`;
+      if (!punchMap.has(groupKey)) {
+        punchMap.set(groupKey, {
+          rawNo: foundNo,
+          rawName: foundName,
+          date: foundDate,
+          times: [...foundTimes],
+          rawStatus: foundStatus,
         });
-      });
-
-      // Sort by date descending, then name
-      results.sort((a, b) => b.normalizedDate.localeCompare(a.normalizedDate) || a.rawName.localeCompare(b.rawName));
-      setParsedRows(results);
-      setHasParsed(true);
-      return;
+      } else {
+        const existing = punchMap.get(groupKey)!;
+        if (!existing.rawName && foundName) existing.rawName = foundName;
+        if (!existing.rawNo && foundNo) existing.rawNo = foundNo;
+        existing.times.push(...foundTimes);
+      }
     }
 
-    // Otherwise: Standard 10-column machine summary format
+    // Convert grouped punches into structured rows
     const results: ParsedAttendanceRow[] = [];
-    const startIdx = (firstLine.includes('ac-no') || firstLine.includes('name')) ? 1 : 0;
+    punchMap.forEach((entry) => {
+      // Sort times chronologically
+      const sortedTimes = [...entry.times].sort();
+      const clockIn = sortedTimes[0] || '10:00:00';
+      const clockOut = sortedTimes.length > 1 ? sortedTimes[sortedTimes.length - 1] : undefined;
 
-    for (let i = startIdx; i < lines.length; i++) {
-      const line = lines[i];
-      const cols = line.includes('\t') ? line.split('\t') : line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-      if (cols.length < 3) continue;
-
-      const rawAcNo = cols[0]?.replace(/^"|"$/g, '').trim() || '';
-      const rawName = cols[1]?.replace(/^"|"$/g, '').trim() || '';
-      const rawDate = cols[2]?.replace(/^"|"$/g, '').trim() || '';
-      const clockIn = cols[5]?.replace(/^"|"$/g, '').trim() || '10:00:00';
-      const clockOut = cols[6]?.replace(/^"|"$/g, '').trim() || undefined;
-
-      const normDate = normalizeDate(rawDate);
-      const matchedEmp = findMatchingEmployee(rawAcNo, rawName);
-
+      // Calculate worked hours
       let hoursWorked = 8.0;
-      if (clockIn && clockOut) {
+      if (clockIn && clockOut && clockIn !== clockOut) {
         const [inH, inM] = clockIn.split(':').map(Number);
         const [outH, outM] = clockOut.split(':').map(Number);
         const diffMins = (outH * 60 + (outM || 0)) - (inH * 60 + (inM || 0));
         hoursWorked = Math.max(0.5, Math.round((diffMins / 60) * 10) / 10);
       }
 
+      // Match with LEEDO Employee Roster
+      const matchedEmp = findMatchingEmployee(entry.rawNo, entry.rawName);
+
+      // Late Arrival Detection:
+      // Standard shift starts at 10:00 AM with a 15-minute grace period (up to 10:15 AM)
+      const [inH, inM] = clockIn.split(':').map(Number);
+      const totalInMins = (inH || 0) * 60 + (inM || 0);
+      const shiftStartMins = 10 * 60; // 10:00 AM
+      const graceLimitMins = 10 * 60 + 15; // 10:15 AM
+      const isLate = totalInMins > graceLimitMins;
+      const lateMinutes = isLate ? totalInMins - shiftStartMins : 0;
+
+      let status: 'Present' | 'Late' | 'Absent' | 'Field Mission' = isLate ? 'Late' : 'Present';
+      if (entry.rawStatus && entry.rawStatus.toLowerCase().includes('absent')) {
+        status = 'Absent';
+        hoursWorked = 0;
+      }
+
       results.push({
-        rawAcNo,
-        rawName,
-        normalizedDate: normDate,
+        rawAcNo: entry.rawNo || (matchedEmp ? matchedEmp.id : 'N/A'),
+        rawName: entry.rawName || (matchedEmp ? matchedEmp.fullName : 'Unknown'),
+        normalizedDate: entry.date,
         clockInTime: clockIn,
         clockOutTime: clockOut,
         hoursWorked,
-        status: 'Present',
+        status,
+        lateMinutes: isLate ? lateMinutes : undefined,
         matchedEmployee: matchedEmp,
         isValid: !!matchedEmp,
-        error: matchedEmp ? undefined : 'Unmatched Employee',
+        error: matchedEmp ? undefined : 'Unmatched Employee Name or Machine ID',
       });
-    }
+    });
 
+    // Sort descending by date, then name
+    results.sort((a, b) => b.normalizedDate.localeCompare(a.normalizedDate) || a.rawName.localeCompare(b.rawName));
     setParsedRows(results);
     setHasParsed(true);
   };
@@ -383,6 +440,7 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
         status: r.status,
         punchLocationName: station,
         locationNote: `Imported via Biometric Fingerprint Machine (AC No: ${r.rawAcNo})`,
+        lateReason: r.lateMinutes ? `Biometric Machine: Clocked in at ${r.clockInTime} (${r.lateMinutes} mins late)` : undefined,
         hoursWorked: r.hoursWorked,
         ipAddress: 'Biometric Machine FP',
         gpsSource: 'Assigned Center Coordinates',
@@ -396,7 +454,15 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
 
   const matchedCount = parsedRows.filter((r) => r.isValid).length;
   const unmatchedCount = parsedRows.filter((r) => !r.isValid).length;
-  const displayedRows = filterUnmatchedOnly ? parsedRows.filter((r) => !r.isValid) : parsedRows;
+  const lateCount = parsedRows.filter((r) => r.status === 'Late').length;
+  const onTimeCount = parsedRows.filter((r) => r.status === 'Present').length;
+
+  const displayedRows = parsedRows.filter((r) => {
+    if (tableFilter === 'late') return r.status === 'Late';
+    if (tableFilter === 'ontime') return r.status === 'Present';
+    if (tableFilter === 'unmatched') return !r.isValid;
+    return true;
+  });
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
@@ -486,7 +552,7 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
             }`}
           >
             <FileText className="w-3.5 h-3.5 text-amber-600" />
-            <span>Paste Raw Text / Table</span>
+            <span>Paste Raw Text / Table (কপি-পেস্ট ডাটা)</span>
           </button>
         </div>
 
@@ -525,64 +591,108 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
 
           {/* Paste Textarea Mode */}
           {importMode === 'paste' && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="font-bold text-slate-800">
-                  Paste Biometric Log Rows (from Excel, PDF, or text file):
-                </label>
-                <button
-                  type="button"
-                  onClick={() => processText(rawText)}
-                  className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg cursor-pointer"
-                >
-                  Parse Pasted Rows
-                </button>
+            <div className="space-y-2 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <label className="font-bold text-slate-800 text-sm block">
+                    Paste Biometric Log Rows (মেশিন বা এক্সেল থেকে কপি করে পেস্ট করুন):
+                  </label>
+                  <p className="text-[11px] text-slate-500">
+                    Supports ZKTeco, Realtime, eTime, tab-separated, comma-separated, or multi-space copied rows.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRawText(SAMPLE_PASTE_DATA);
+                      processText(SAMPLE_PASTE_DATA);
+                    }}
+                    className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold rounded-xl cursor-pointer transition-colors shadow-2xs flex items-center gap-1"
+                    title="Load sample copy-pasted machine data with on-time & late punches"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Paste Sample Data (নমুনা পেস্ট)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => processText(rawText)}
+                    className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl cursor-pointer shadow-xs transition-all flex items-center gap-1"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Parse Pasted Rows</span>
+                  </button>
+                </div>
               </div>
               <textarea
                 rows={5}
                 value={rawText}
                 onChange={(e) => setRawText(e.target.value)}
-                placeholder="Department   Name   No.   Date/Time   Status&#10;Office   Md. Habibi   3   01/09/2026 09:56:58   C/In..."
-                className="w-full p-3 font-mono text-[11px] border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 bg-slate-50"
+                placeholder="Department   Name   No.   Date/Time   Status&#10;Office   Murshida Akhter   2   2026-10-06 09:54:12   C/In&#10;Office   Md. Habibur Rahman   3   2026-10-06 10:38:22   C/In (Late)..."
+                className="w-full p-3 font-mono text-[11px] border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white"
               />
             </div>
           )}
 
-          {/* Summary KPIs */}
+          {/* Summary KPIs & Filter Bar */}
           {hasParsed && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
-                <span className="text-[10px] uppercase font-bold text-slate-500 block">Total Records</span>
+              <button
+                type="button"
+                onClick={() => setTableFilter('all')}
+                className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                  tableFilter === 'all'
+                    ? 'bg-indigo-50 border-indigo-400 ring-2 ring-indigo-300'
+                    : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">Total Processed</span>
                 <p className="text-xl font-bold text-slate-900 mt-0.5">{parsedRows.length}</p>
-                <span className="text-[10px] text-slate-400">Aggregated daily punches</span>
-              </div>
+                <span className="text-[10px] text-slate-400">All daily punch rows</span>
+              </button>
 
-              <div className="bg-emerald-50/50 p-3.5 rounded-2xl border border-emerald-200">
-                <span className="text-[10px] uppercase font-bold text-emerald-700 block">Ready to Import</span>
-                <p className="text-xl font-bold text-emerald-700 mt-0.5">{matchedCount}</p>
-                <span className="text-[10px] text-emerald-600">Matched with staff roster</span>
-              </div>
+              <button
+                type="button"
+                onClick={() => setTableFilter('ontime')}
+                className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                  tableFilter === 'ontime'
+                    ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-300'
+                    : 'bg-emerald-50/40 border-emerald-200 hover:bg-emerald-50'
+                }`}
+              >
+                <span className="text-[10px] uppercase font-bold text-emerald-700 block">On-Time (সঠিক সময়)</span>
+                <p className="text-xl font-bold text-emerald-700 mt-0.5">{onTimeCount}</p>
+                <span className="text-[10px] text-emerald-600">Clocked in before 10:15 AM</span>
+              </button>
 
-              <div className="bg-amber-50/50 p-3.5 rounded-2xl border border-amber-200">
-                <span className="text-[10px] uppercase font-bold text-amber-700 block">Unmatched Staff</span>
-                <p className="text-xl font-bold text-amber-700 mt-0.5">{unmatchedCount}</p>
-                <span className="text-[10px] text-amber-600">Can be assigned manually</span>
-              </div>
+              <button
+                type="button"
+                onClick={() => setTableFilter('late')}
+                className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                  tableFilter === 'late'
+                    ? 'bg-amber-100 border-amber-500 ring-2 ring-amber-400'
+                    : 'bg-amber-50/60 border-amber-300 hover:bg-amber-100'
+                }`}
+              >
+                <span className="text-[10px] uppercase font-bold text-amber-800 block">Late Arrivals (দেরি)</span>
+                <p className="text-xl font-bold text-amber-800 mt-0.5">{lateCount}</p>
+                <span className="text-[10px] text-amber-700 font-semibold">After 10:15 AM grace</span>
+              </button>
 
-              <div className="bg-indigo-50/50 p-3.5 rounded-2xl border border-indigo-200 flex flex-col justify-between">
-                <span className="text-[10px] uppercase font-bold text-indigo-700 block">Filter Unmatched</span>
-                <button
-                  type="button"
-                  onClick={() => setFilterUnmatchedOnly(!filterUnmatchedOnly)}
-                  className={`mt-1 py-1.5 px-2.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
-                    filterUnmatchedOnly
-                      ? 'bg-amber-600 text-white border-amber-700'
-                      : 'bg-white text-slate-700 border-slate-300'
-                  }`}
-                >
-                  {filterUnmatchedOnly ? 'Showing Unmatched Only' : 'Show All Rows'}
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setTableFilter('unmatched')}
+                className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                  tableFilter === 'unmatched'
+                    ? 'bg-rose-50 border-rose-400 ring-2 ring-rose-300'
+                    : 'bg-rose-50/30 border-rose-200 hover:bg-rose-50'
+                }`}
+              >
+                <span className="text-[10px] uppercase font-bold text-rose-700 block">Unmatched Staff</span>
+                <p className="text-xl font-bold text-rose-700 mt-0.5">{unmatchedCount}</p>
+                <span className="text-[10px] text-rose-600">Manual re-assign required</span>
+              </button>
             </div>
           )}
 
@@ -657,13 +767,26 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
                         </td>
                         <td className="py-2.5 px-3">
                           <span
-                            className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                               row.status === 'Present'
                                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                : row.status === 'Late'
+                                ? 'bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs'
+                                : 'bg-rose-50 text-rose-700 border border-rose-200'
                             }`}
                           >
-                            {row.status}
+                            {row.status === 'Late' ? (
+                              <>
+                                <span>⏰ Late</span>
+                                {row.lateMinutes && <span className="font-mono">({row.lateMinutes}m delay)</span>}
+                              </>
+                            ) : row.status === 'Present' ? (
+                              <>
+                                <span>✅ On-Time</span>
+                              </>
+                            ) : (
+                              row.status
+                            )}
                           </span>
                         </td>
                       </tr>

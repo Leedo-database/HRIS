@@ -615,12 +615,34 @@ export const CompanySettings: React.FC<CompanySettingsProps> = ({
           </div>
 
           <div>
-            <label className="block text-slate-700 font-semibold mb-1">Signatory Title / Designation *</label>
+            <label className="block text-slate-700 font-semibold mb-1">Executive Title / Designation *</label>
             <input
               type="text"
               required
               value={formData.signatoryDesignation}
               onChange={(e) => setFormData({ ...formData, signatoryDesignation: e.target.value })}
+              className="w-full p-2 border border-slate-300 rounded-xl"
+            />
+          </div>
+
+          <div>
+            <label className="block text-slate-700 font-semibold mb-1">Authorized HR & Admin Signatory</label>
+            <input
+              type="text"
+              placeholder="e.g. Md. Omar Faruque"
+              value={formData.hrSignatoryName || ''}
+              onChange={(e) => setFormData({ ...formData, hrSignatoryName: e.target.value })}
+              className="w-full p-2 border border-slate-300 rounded-xl font-semibold"
+            />
+          </div>
+
+          <div>
+            <label className="block text-slate-700 font-semibold mb-1">HR Signatory Title / Designation</label>
+            <input
+              type="text"
+              placeholder="e.g. Manager HR & Admin"
+              value={formData.hrSignatoryDesignation || ''}
+              onChange={(e) => setFormData({ ...formData, hrSignatoryDesignation: e.target.value })}
               className="w-full p-2 border border-slate-300 rounded-xl"
             />
           </div>

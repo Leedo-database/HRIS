@@ -19,7 +19,7 @@ import {
   GovernmentHoliday
 } from './types/hris';
 import { OFFICIAL_BANGLADESH_HOLIDAYS_2026 } from './data/bangladeshHolidays';
-import { getMonthHolidayMetrics } from './utils/calculations';
+import { getMonthHolidayMetrics, isEmployeeActive } from './utils/calculations';
 import { 
   INITIAL_COMPANY_PROFILE, 
   INITIAL_EMPLOYEES, 
@@ -104,9 +104,14 @@ export default function App() {
   const [employees, setEmployees] = useState<Employee[]>(() => loadMergedEmployees());
   const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => {
     const raw = loadFromStorage(STORAGE_KEYS.ATTENDANCE, INITIAL_ATTENDANCE);
-    return raw.filter(
+    const valid = raw.filter(
       (a) => a && a.employeeId && isValidLeedoStaffId(a.employeeId) && !LEGACY_MOCK_NAMES.has((a.employeeName || '').trim())
     );
+    if (valid.length < 10) {
+      saveToStorage(STORAGE_KEYS.ATTENDANCE, INITIAL_ATTENDANCE);
+      return INITIAL_ATTENDANCE;
+    }
+    return valid;
   });
   const [leaves, setLeaves] = useState<LeaveRequest[]>(() => {
     const raw = loadFromStorage(STORAGE_KEYS.LEAVES, INITIAL_LEAVES);
@@ -243,8 +248,12 @@ export default function App() {
   );
   const [currentUser, setCurrentUser] = useState<Employee>(() => {
     const allEmps = loadMergedEmployees();
-    const savedId = loadFromStorage(STORAGE_KEYS.CURRENT_USER_ID, '1001');
-    return allEmps.find((e) => e.id === savedId) || allEmps[0];
+    const savedId = loadFromStorage(STORAGE_KEYS.CURRENT_USER_ID, '1057');
+    const matched = allEmps.find((e) => e.id === savedId);
+    if (matched && isEmployeeActive(matched)) {
+      return matched;
+    }
+    return allEmps.find((e) => e.id === '1057') || allEmps.find((e) => e.id === '1001') || allEmps.find(isEmployeeActive) || allEmps[0];
   });
 
   // Navigation & UI controls
@@ -539,6 +548,25 @@ export default function App() {
     saveAttendanceToCloud(rec);
   };
 
+  const handleImportAttendanceRecords = (importedRecords: AttendanceRecord[]) => {
+    if (!importedRecords || importedRecords.length === 0) return;
+    setAttendance((prev) => {
+      const map = new Map<string, AttendanceRecord>();
+      prev.forEach((rec) => {
+        const key = `${rec.employeeId}_${rec.date}`;
+        map.set(key, rec);
+      });
+      importedRecords.forEach((rec) => {
+        const key = `${rec.employeeId}_${rec.date}`;
+        map.set(key, rec);
+        saveAttendanceToCloud(rec);
+      });
+      const merged = Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
+      saveToStorage(STORAGE_KEYS.ATTENDANCE, merged);
+      return merged;
+    });
+  };
+
   const handleAddLeave = (leave: LeaveRequest) => {
     const updated = [leave, ...leaves];
     setLeaves(updated);
@@ -637,7 +665,41 @@ export default function App() {
       const totalEarn = gross + mobile + travel;
 
       const dailyRate = Math.round((gross / 26) * 100) / 100;
-      const absentDays = 0;
+
+      // Compute actual absent days (scheduled duty days with no biometric attendance and no approved leave)
+      const [pYearStr, pMonthStr] = monthKey.split('-');
+      const pYear = parseInt(pYearStr, 10);
+      const pMonth = parseInt(pMonthStr, 10);
+      const pDaysInMonth = new Date(pYear, pMonth, 0).getDate();
+      const pEmpDutyDays = emp.dutyDays && emp.dutyDays.length > 0
+        ? emp.dutyDays
+        : ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu'];
+
+      let dynamicAbsentDays = 0;
+      const curToday = new Date().toISOString().split('T')[0];
+      const DAY_MAP = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+      for (let d = 1; d <= pDaysInMonth; d++) {
+        const dStr = `${pYear}-${String(pMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        if (dStr > curToday && monthKey === curToday.substring(0, 7)) continue;
+
+        const dObj = new Date(pYear, pMonth - 1, d);
+        const dayName = DAY_MAP[dObj.getDay()];
+        if (!pEmpDutyDays.includes(dayName)) continue;
+
+        const isGovHoliday = holidays.some(h => dStr >= h.startDate && dStr <= h.endDate);
+        if (isGovHoliday) continue;
+
+        const hasLeave = leaves.some(l => l.employeeId === emp.id && l.status === 'Approved' && dStr >= l.startDate && dStr <= l.endDate);
+        if (hasLeave) continue;
+
+        const hasPunch = attendance.some(a => a.employeeId === emp.id && a.date === dStr && a.status !== 'Absent');
+        if (!hasPunch) {
+          dynamicAbsentDays++;
+        }
+      }
+
+      const absentDays = dynamicAbsentDays;
       const absentDed = Math.round(dailyRate * absentDays);
       const advanceDed = emp.advanceBalance ?? 0;
       const pf = Math.round(basic * (emp.pfDeductionPercentage / 100));
@@ -892,6 +954,7 @@ export default function App() {
                 holidays={holidays}
                 onAddAttendance={handleAddAttendance}
                 onUpdateAttendance={handleUpdateAttendance}
+                onImportAttendanceRecords={handleImportAttendanceRecords}
               />
             )}
 
@@ -899,8 +962,11 @@ export default function App() {
               <TimesheetModule
                 timesheets={timesheets}
                 employees={employees}
+                attendance={attendance}
+                leaves={leaves}
                 currentUser={currentUser}
                 currentRole={currentRole}
+                company={company}
                 jobLocations={jobLocations}
                 holidays={holidays}
                 onAddTimesheet={handleAddTimesheet}

@@ -91,6 +91,99 @@ export function getProjectDistribution(employees: Employee[]) {
   return counts;
 }
 
+export function getReligionDistribution(employees: Employee[]) {
+  const active = employees.filter(isEmployeeActive);
+  const total = active.length || 1;
+  let islam = 0;
+  let hindu = 0;
+  let others = 0;
+
+  active.forEach((e) => {
+    const rel = (e.religion || '').toLowerCase().trim();
+    if (rel.includes('islam') || rel.includes('muslim')) {
+      islam++;
+    } else if (rel.includes('hindu')) {
+      hindu++;
+    } else {
+      others++;
+    }
+  });
+
+  const islamPct = Math.round((islam / total) * 100);
+  const hinduPct = Math.round((hindu / total) * 100);
+  const othersPct = Math.max(0, 100 - islamPct - hinduPct);
+
+  return {
+    total,
+    islam,
+    hindu,
+    others,
+    islamPct,
+    hinduPct,
+    othersPct,
+  };
+}
+
+export function getAgeDistribution(employees: Employee[]) {
+  const active = employees.filter(isEmployeeActive);
+  const total = active.length || 1;
+  let under25 = 0;
+  let age25to35 = 0;
+  let age36to45 = 0;
+  let age46plus = 0;
+
+  const currentYear = 2026;
+
+  active.forEach((e) => {
+    let birthYear: number | null = null;
+    if (e.dob) {
+      const match = String(e.dob).match(/(19\d{2}|20\d{2})/);
+      if (match) {
+        birthYear = parseInt(match[1], 10);
+      }
+    }
+
+    const age = birthYear ? currentYear - birthYear : 32;
+
+    if (age < 25) {
+      under25++;
+    } else if (age <= 35) {
+      age25to35++;
+    } else if (age <= 45) {
+      age36to45++;
+    } else {
+      age46plus++;
+    }
+  });
+
+  return {
+    total,
+    under25,
+    under25Pct: Math.round((under25 / total) * 100),
+    age25to35,
+    age25to35Pct: Math.round((age25to35 / total) * 100),
+    age36to45,
+    age36to45Pct: Math.round((age36to45 / total) * 100),
+    age46plus,
+    age46plusPct: Math.round((age46plus / total) * 100),
+  };
+}
+
+export function getNewJoinees(employees: Employee[]) {
+  const active = employees.filter(isEmployeeActive);
+  const newJoins = active.filter((e) => {
+    if (!e.joiningDate) return false;
+    const str = String(e.joiningDate).toLowerCase();
+    return str.includes('2026') || str.includes('2025');
+  });
+
+  return {
+    count: newJoins.length,
+    percentage: Math.round((newJoins.length / (active.length || 1)) * 100),
+    list: newJoins,
+  };
+}
+
 export interface UpcomingMilestone {
   type: 'Birthday' | 'Work Anniversary' | 'Contract Renewal' | 'Probation Review';
   employeeId: string;
