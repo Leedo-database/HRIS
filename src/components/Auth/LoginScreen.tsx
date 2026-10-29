@@ -244,7 +244,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               </div>
             </div>
             <h2 className="text-lg sm:text-xl font-bold tracking-tight text-white">
-              LEEDO Staff HRIS Portal
+              {company.name} HRIS Portal
             </h2>
             <p className="text-xs text-indigo-200 mt-1 font-medium">
               Employee ID Authentication & Self-Service
@@ -389,7 +389,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
       {/* Footer Notice */}
       <footer className="relative z-10 p-4 text-center text-xs text-slate-500 border-t border-slate-800/60 bg-slate-900/30 backdrop-blur-md">
-        <span>LEEDO HRIS • Master Database Authentication • {company.headOfficeAddress}</span>
+        <span>{company.name} HRIS • Master Database Authentication • {company.headOfficeAddress}</span>
       </footer>
     </div>
   );

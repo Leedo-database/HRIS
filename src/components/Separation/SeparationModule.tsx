@@ -431,8 +431,23 @@ export const SeparationModule: React.FC<SeparationModuleProps> = ({
 
             <div className="p-8 space-y-6 text-slate-900 text-xs bg-white">
               <div className="border-b-2 border-slate-900 pb-4 text-center">
+                {company.logoUrl && (
+                  <div className="flex justify-center mb-2">
+                    <img
+                      src={company.logoUrl}
+                      alt={company.name}
+                      className="h-14 w-auto object-contain max-w-[140px]"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  </div>
+                )}
                 <h1 className="text-xl font-bold uppercase tracking-wide">{company.name}</h1>
                 <p className="text-xs text-slate-600 mt-1">{company.headOfficeAddress}</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  Govt Reg: {company.registrationNo || 'NGO-BUR/DH-2849/2000'} • Email: {company.contactEmail} {company.phone ? `• Phone: ${company.phone}` : ''}
+                </p>
                 <div className="mt-3 inline-block bg-slate-100 px-4 py-1 rounded-full font-bold uppercase text-xs">
                   Official Final Settlement & Clearance Statement
                 </div>
@@ -506,16 +521,20 @@ export const SeparationModule: React.FC<SeparationModuleProps> = ({
 
               <div className="pt-12 grid grid-cols-4 gap-4 text-center text-[10px] text-slate-700 border-t border-slate-300 mt-8">
                 <div>
-                  <div className="border-t border-slate-400 pt-1">Prepared By (HR)</div>
+                  <div className="border-t border-slate-400 pt-1 font-semibold">{company.hrSignatoryName || 'Md. Omar Faruque'}</div>
+                  <p className="text-slate-500">{company.hrSignatoryDesignation || 'Manager HR & Admin'}</p>
                 </div>
                 <div>
-                  <div className="border-t border-slate-400 pt-1">Checked By (Finance)</div>
+                  <div className="border-t border-slate-400 pt-1 font-semibold">Murshida Akhter Kanta</div>
+                  <p className="text-slate-500">Director (Admin & Finance)</p>
                 </div>
                 <div>
-                  <div className="border-t border-slate-400 pt-1">Approved By (Director)</div>
+                  <div className="border-t border-slate-400 pt-1 font-semibold">{company.signatoryName || 'Forhad Hossain'}</div>
+                  <p className="text-slate-500">{company.signatoryDesignation || 'Executive Director'}</p>
                 </div>
                 <div>
-                  <div className="border-t border-slate-400 pt-1">Received & Acknowledged By</div>
+                  <div className="border-t border-slate-400 pt-1 font-semibold">{activePrintRecord.employeeName}</div>
+                  <p className="text-slate-500">Employee Acknowledgment</p>
                 </div>
               </div>
             </div>

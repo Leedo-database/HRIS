@@ -10,7 +10,8 @@ export function exportPayslipToDocx(
   company: CompanyProfile,
   employee?: Employee
 ) {
-  const fileName = `LEEDO_Payslip_${payslip.employeeName.replace(/[^a-zA-Z0-9]/g, '_')}_${payslip.monthKey}.doc`;
+  const cleanOrg = company.name ? company.name.split(' ')[0].replace(/[^a-zA-Z0-9]/g, '') : 'Company';
+  const fileName = `${cleanOrg}_Payslip_${payslip.employeeName.replace(/[^a-zA-Z0-9]/g, '_')}_${payslip.monthKey}.doc`;
 
   const basic = payslip.basicSalary || 0;
   const house = payslip.houseRent || 0;
@@ -154,7 +155,7 @@ export function exportPayslipToDocx(
         <td style="border: none; vertical-align: top;">
           <h1 class="org-title">${company.name}</h1>
           <p class="org-sub">${company.headOfficeAddress}</p>
-          <p class="org-sub">NGO Affairs Bureau Reg: NGO-BUR/DH-2849/2000 • Email: ${company.contactEmail}</p>
+          <p class="org-sub">Govt Reg: ${company.registrationNo || 'NGO-BUR/DH-2849/2000'} • Email: ${company.contactEmail} ${company.phone ? `• Phone: ${company.phone}` : ''}</p>
         </td>
         <td style="border: none; vertical-align: top; text-align: right;">
           <div class="doc-badge">OFFICIAL PAYSLIP</div>

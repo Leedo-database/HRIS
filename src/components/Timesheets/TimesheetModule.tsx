@@ -1497,17 +1497,29 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
               {/* Printable Monthly Timesheet (A4 Formatted Document) */}
               <div className="p-6 sm:p-10 space-y-5 overflow-y-auto print:p-0 print:m-0 text-slate-900 bg-white leading-relaxed text-xs">
                 {/* Official NGO Letterhead */}
-                <div className="border-b-2 border-slate-900 pb-4 flex items-center justify-between">
-                  <div>
-                    <h1 className="text-xl font-black text-slate-900 tracking-tight">LEEDO</h1>
-                    <p className="text-xs font-semibold text-slate-700">
-                      Local Education and Economic Development Organization
-                    </p>
-                    <p className="text-[10px] text-slate-500">
-                      Govt NGO Affairs Bureau Reg: NGO-BUR/DH-2849/2000 • Banani, Dhaka, Bangladesh
-                    </p>
+                <div className="border-b-2 border-slate-900 pb-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    {company?.logoUrl && (
+                      <img
+                        src={company.logoUrl}
+                        alt={company?.name || 'Company Logo'}
+                        className="h-12 w-auto object-contain max-w-[120px] shrink-0"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    )}
+                    <div>
+                      <h1 className="text-xl font-black text-slate-900 tracking-tight">{company?.name || 'LEEDO'}</h1>
+                      <p className="text-xs font-semibold text-slate-700">
+                        {company?.organizationType || 'Local Education and Economic Development Organization'}
+                      </p>
+                      <p className="text-[10px] text-slate-500">
+                        Govt Reg: {company?.registrationNo || 'NGO-BUR/DH-2849/2000'} • {company?.headOfficeAddress || 'Banani, Dhaka, Bangladesh'} {company?.phone ? `• Phone: ${company.phone}` : ''} {company?.contactEmail ? `• Email: ${company.contactEmail}` : ''}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right shrink-0">
                     <span className="text-xs font-mono font-bold bg-slate-100 px-2.5 py-1 rounded-md border border-slate-300">
                       MONTHLY TIMESHEET DOCKET
                     </span>
@@ -1708,8 +1720,8 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                   </div>
                   <div>
                     <div className="h-10 border-b border-dashed border-slate-400 mb-1" />
-                    <p className="font-bold text-slate-900">Forhad Hossain (Founder & ED)</p>
-                    <p className="text-[10px] text-slate-500">Executive Director / HR Approval</p>
+                    <p className="font-bold text-slate-900">{edSignatoryName}</p>
+                    <p className="text-[10px] text-slate-500">{edSignatoryTitle}</p>
                   </div>
                 </div>
               </div>
@@ -1786,17 +1798,29 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
               {/* Master Summary Printable Table (A4 Landscape Formatted) */}
               <div className="p-6 sm:p-10 space-y-6 overflow-y-auto print:p-0 print:m-0 text-slate-900 bg-white leading-relaxed text-xs">
                 {/* Official Letterhead Header */}
-                <div className="border-b-2 border-slate-900 pb-4 flex items-center justify-between">
-                  <div>
-                    <h1 className="text-xl font-black text-slate-900 tracking-tight">LEEDO</h1>
-                    <p className="text-xs font-semibold text-slate-700">
-                      Local Education and Economic Development Organization
-                    </p>
-                    <p className="text-[10px] text-slate-500">
-                      NGO Affairs Bureau Reg: NGO-BUR/DH-2849/2000 • House 42, Road 11, Banani, Dhaka
-                    </p>
+                <div className="border-b-2 border-slate-900 pb-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    {company?.logoUrl && (
+                      <img
+                        src={company.logoUrl}
+                        alt={company?.name || 'Company Logo'}
+                        className="h-12 w-auto object-contain max-w-[120px] shrink-0"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    )}
+                    <div>
+                      <h1 className="text-xl font-black text-slate-900 tracking-tight">{company?.name || 'LEEDO'}</h1>
+                      <p className="text-xs font-semibold text-slate-700">
+                        {company?.organizationType || 'Local Education and Economic Development Organization'}
+                      </p>
+                      <p className="text-[10px] text-slate-500">
+                        Govt Reg: {company?.registrationNo || 'NGO-BUR/DH-2849/2000'} • {company?.headOfficeAddress || 'Banani, Dhaka'} {company?.phone ? `• Phone: ${company.phone}` : ''} {company?.contactEmail ? `• Email: ${company.contactEmail}` : ''}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right shrink-0">
                     <span className="text-xs font-mono font-bold bg-slate-100 px-3 py-1 rounded-md border border-slate-300">
                       MASTER TIMESHEET SUMMARY
                     </span>
@@ -1984,17 +2008,29 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
               {/* Printable Register (A4 Formatted Document) */}
               <div className="p-6 sm:p-10 space-y-5 overflow-y-auto print:p-0 print:m-0 text-slate-900 bg-white leading-relaxed text-xs">
                 {/* Official NGO Letterhead */}
-                <div className="border-b-2 border-slate-900 pb-4 flex items-center justify-between">
-                  <div>
-                    <h1 className="text-xl font-black text-slate-900 tracking-tight">LEEDO</h1>
-                    <p className="text-xs font-semibold text-slate-700">
-                      Local Education and Economic Development Organization
-                    </p>
-                    <p className="text-[10px] text-slate-500">
-                      Govt NGO Affairs Bureau Reg: NGO-BUR/DH-2849/2000 • Banani, Dhaka, Bangladesh
-                    </p>
+                <div className="border-b-2 border-slate-900 pb-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    {company?.logoUrl && (
+                      <img
+                        src={company.logoUrl}
+                        alt={company?.name || 'Company Logo'}
+                        className="h-12 w-auto object-contain max-w-[120px] shrink-0"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    )}
+                    <div>
+                      <h1 className="text-xl font-black text-slate-900 tracking-tight">{company?.name || 'LEEDO'}</h1>
+                      <p className="text-xs font-semibold text-slate-700">
+                        {company?.organizationType || 'Local Education and Economic Development Organization'}
+                      </p>
+                      <p className="text-[10px] text-slate-500">
+                        Govt Reg: {company?.registrationNo || 'NGO-BUR/DH-2849/2000'} • {company?.headOfficeAddress || 'Banani, Dhaka, Bangladesh'} {company?.phone ? `• Phone: ${company.phone}` : ''} {company?.contactEmail ? `• Email: ${company.contactEmail}` : ''}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right shrink-0">
                     <span className="text-xs font-mono font-bold bg-amber-100 text-amber-900 px-2.5 py-1 rounded-md border border-amber-300">
                       ATTENDANCE EXCEPTIONS & PUNCTUALITY AUDIT
                     </span>
@@ -2006,7 +2042,7 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                 <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200 flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h3 className="font-bold text-slate-900 text-xs">
-                      LEEDO Monthly Lateness & Unapproved Absence Docket (দেরি ও অনুপস্থিতি বিশেষ টাইমশীট)
+                      {company?.name || 'LEEDO'} Monthly Lateness & Unapproved Absence Docket (দেরি ও অনুপস্থিতি বিশেষ টাইমশীট)
                     </h3>
                     <p className="text-[10px] text-slate-600 mt-0.5">
                       Shift Start: 10:00 AM (Grace period permitted up to 10:15 AM). Punches at or after 10:16 AM are flagged as late arrivals.

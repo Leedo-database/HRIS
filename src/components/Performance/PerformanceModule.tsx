@@ -927,7 +927,7 @@ export const PerformanceModule: React.FC<PerformanceModuleProps> = ({
               </div>
 
               <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-[11px] text-amber-900">
-                <strong>Audit Rule:</strong> Per LEEDO HR governance, performance targets are permanently preserved in your personnel record. Deletion is disabled. You can adjust progress and status at any time.
+                <strong>Audit Rule:</strong> Per institutional HR governance, performance targets are permanently preserved in your personnel record. Deletion is disabled. You can adjust progress and status at any time.
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">

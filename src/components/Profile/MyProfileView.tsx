@@ -268,7 +268,7 @@ export const MyProfileView: React.FC<MyProfileViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">Official LEEDO Email (Locked)</label>
+                <label className="block text-slate-700 font-semibold mb-1">Official {company.name} Email (Locked)</label>
                 <input
                   type="email"
                   disabled
@@ -535,7 +535,7 @@ export const MyProfileView: React.FC<MyProfileViewProps> = ({
             <div className="bg-emerald-50/50 p-6 rounded-3xl border border-emerald-200/80 space-y-3 text-xs">
               <div className="flex items-center gap-2 text-emerald-900 font-bold">
                 <ShieldCheck className="w-5 h-5 text-emerald-600" />
-                <span>LEEDO Child Safeguarding & NGO Bureau Compliance</span>
+                <span>{company.name} Safeguarding & Regulatory Compliance</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-[11px]">
                 <div className="p-2.5 bg-white rounded-xl border border-emerald-100 flex items-center gap-2">

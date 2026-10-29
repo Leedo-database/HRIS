@@ -114,8 +114,9 @@ export const OfficialLettersModule: React.FC<OfficialLettersModuleProps> = ({
     const typeCode = selectedType === 'appointment_letter' 
       ? (appointmentCategory === 'Permanent' ? 'APT-PERM' : appointmentCategory === 'Contractual' ? 'APT-CONT' : 'APT-VOL')
       : selectedType.toUpperCase().slice(0, 4);
-    setReferenceNo(`LEEDO/HR/${now.getFullYear()}/${mon}/${typeCode}-${emp?.id || '1001'}-${rand}`);
-  }, [selectedStaffId, selectedType, appointmentCategory, emp?.id]);
+    const cleanOrg = company.name ? company.name.split(' ')[0].toUpperCase().replace(/[^A-Z0-9]/g, '') : 'ORG';
+    setReferenceNo(`${cleanOrg}/HR/${now.getFullYear()}/${mon}/${typeCode}-${emp?.id || '1001'}-${rand}`);
+  }, [selectedStaffId, selectedType, appointmentCategory, emp?.id, company.name]);
 
   const handlePrint = () => {
     // Save to profile and issued letters before printing if handler exists
@@ -646,7 +647,7 @@ export const OfficialLettersModule: React.FC<OfficialLettersModuleProps> = ({
                       <tr>
                         <td className="p-2.5 font-bold">Child Safeguarding Adherence</td>
                         <td className="p-2.5 text-emerald-800 font-semibold">
-                          Zero-tolerance policy on child abuse, sexual exploitation, and strict adherence to LEEDO Code of Conduct.
+                          Zero-tolerance policy on child abuse, sexual exploitation, and strict adherence to {company.name} Code of Conduct.
                         </td>
                       </tr>
                     </tbody>

@@ -564,7 +564,7 @@ export const EmployeeDetailModal: React.FC<EmployeeDetailModalProps> = ({
                     </span>
                   </h4>
                   <p className="text-slate-600 mt-0.5 leading-relaxed">
-                    All CVs, certificates, police verifications, and LEEDO signed due diligence documents are permanently stored in this staff member's official dossier. These files remain accessible for 5-10+ years for USAID, EU, UNICEF, and NGO Affairs Bureau compliance audits.
+                    All CVs, certificates, police verifications, and {company.name} signed due diligence documents are permanently stored in this staff member's official dossier. These files remain accessible for 5-10+ years for USAID, EU, UNICEF, and NGO Affairs Bureau compliance audits.
                   </p>
                 </div>
               </div>

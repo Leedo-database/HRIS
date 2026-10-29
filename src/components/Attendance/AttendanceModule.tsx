@@ -892,7 +892,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
               <p className="text-2xl font-black text-slate-900 mt-1 font-mono">
                 {todaySummary.totalEmployees}
               </p>
-              <span className="text-[10px] text-indigo-600 font-medium">Authentic LEEDO Staff</span>
+              <span className="text-[10px] text-indigo-600 font-medium">Verified Active Personnel</span>
             </div>
 
             <div className="bg-white p-4 rounded-2xl border border-emerald-100 bg-emerald-50/20 shadow-xs">

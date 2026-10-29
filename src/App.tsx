@@ -1118,6 +1118,7 @@ export default function App() {
                 onUpdateCompany={(c) => {
                   setCompany(c);
                   saveToStorage(STORAGE_KEYS.COMPANY, c);
+                  saveCompanyConfigToCloud(c, jobLocations);
                 }}
                 onResetData={handleResetData}
                 jobLocations={jobLocations}

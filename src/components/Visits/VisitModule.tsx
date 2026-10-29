@@ -380,6 +380,9 @@ export const VisitModule: React.FC<VisitModuleProps> = ({
                 </div>
                 <h1 className="text-xl font-bold uppercase tracking-wide">{company.name}</h1>
                 <p className="text-xs text-slate-600 mt-1">{company.headOfficeAddress}</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  Govt Reg: {company.registrationNo || 'NGO-BUR/DH-2849/2000'} • Email: {company.contactEmail} {company.phone ? `• Phone: ${company.phone}` : ''}
+                </p>
                 <div className="mt-3 inline-block bg-slate-100 px-4 py-1 rounded-full font-bold uppercase text-xs">
                   Official Travel Authorization & Field Movement Order
                 </div>
@@ -406,13 +409,16 @@ export const VisitModule: React.FC<VisitModuleProps> = ({
 
               <div className="pt-12 grid grid-cols-3 gap-6 text-center text-[10px] text-slate-700 border-t border-slate-300 mt-8">
                 <div>
-                  <div className="border-t border-slate-400 pt-1">Applicant Signature</div>
+                  <div className="border-t border-slate-400 pt-1 font-semibold">{activePrintVisit.employeeName}</div>
+                  <p className="text-slate-500">Applicant Signature</p>
                 </div>
                 <div>
-                  <div className="border-t border-slate-400 pt-1">Line Supervisor Recommendation</div>
+                  <div className="border-t border-slate-400 pt-1 font-semibold">{company.hrSignatoryName || 'Md. Omar Faruque'}</div>
+                  <p className="text-slate-500">{company.hrSignatoryDesignation || 'Manager HR & Admin'}</p>
                 </div>
                 <div>
-                  <div className="border-t border-slate-400 pt-1">Director / HR Approval</div>
+                  <div className="border-t border-slate-400 pt-1 font-semibold">{company.signatoryName || 'Forhad Hossain'}</div>
+                  <p className="text-slate-500">{company.signatoryDesignation || 'Executive Director'}</p>
                 </div>
               </div>
             </div>

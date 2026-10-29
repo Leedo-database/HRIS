@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CompanyProfile, Employee, LEEDO_JOB_LOCATIONS } from '../../types/hris';
 import { 
   Building2, 
@@ -43,6 +43,11 @@ export const CompanySettings: React.FC<CompanySettingsProps> = ({
   const [formData, setFormData] = useState<CompanyProfile>(company);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+
+  // Sync formData whenever company prop changes
+  useEffect(() => {
+    setFormData(company);
+  }, [company]);
 
   // Job location management local states
   const [newLocationInput, setNewLocationInput] = useState('');

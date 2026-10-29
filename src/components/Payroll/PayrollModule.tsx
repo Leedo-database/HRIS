@@ -934,7 +934,7 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
               <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-200">
                 <div>
                   <span className="font-bold text-slate-900 block">Bank Debit Account:</span>
-                  <span className="font-mono text-slate-600">Brac Bank PLC — A/C: 150120100149200 (LEEDO General Fund Account)</span>
+                  <span className="font-mono text-slate-600">Brac Bank PLC — A/C: 150120100149200 ({company.name} Central Operations Account)</span>
                 </div>
                 <button
                   onClick={exportBankAdviceCSV}
@@ -1019,13 +1019,27 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
 
             <div className="p-8 space-y-6 overflow-y-auto print:p-0 print:m-0 text-slate-900">
               {/* Official Header */}
-              <div className="border-b-2 border-slate-900 pb-4 flex items-center justify-between">
-                <div>
-                  <h1 className="text-xl font-black text-slate-900 tracking-tight">{company.name}</h1>
-                  <p className="text-xs text-slate-600">{company.headOfficeAddress}</p>
-                  <p className="text-[10px] text-slate-500">NGO Affairs Bureau Reg: NGO-BUR/DH-2849/2000</p>
+              <div className="border-b-2 border-slate-900 pb-4 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  {company.logoUrl && (
+                    <img
+                      src={company.logoUrl}
+                      alt={company.name}
+                      className="h-12 w-auto object-contain max-w-[120px] shrink-0"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  )}
+                  <div>
+                    <h1 className="text-xl font-black text-slate-900 tracking-tight">{company.name}</h1>
+                    <p className="text-xs text-slate-600">{company.headOfficeAddress}</p>
+                    <p className="text-[10px] text-slate-500">
+                      Govt Reg: {company.registrationNo || 'NGO-BUR/DH-2849/2000'} • Email: {company.contactEmail} {company.phone ? `• Phone: ${company.phone}` : ''}
+                    </p>
+                  </div>
                 </div>
-                <div className="text-right">
+                <div className="text-right shrink-0">
                   <span className="text-xs font-mono font-bold bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200">
                     PAYSLIP / SALARY CERTIFICATE
                   </span>
