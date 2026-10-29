@@ -24,12 +24,24 @@
   background: #94a3b8;
 }
 
-/* Print stylesheets for Official HR Letters, Payslips, Bank Forwarding Forms, and Leave Forms */
+/* Print stylesheets for Official HR Letters, Payslips, Timesheets, Monthly Attendance Summaries, and Reports */
 @media print {
-  body {
+  @page {
+    size: auto;
+    margin: 12mm 10mm;
+  }
+
+  html, body {
+    height: auto !important;
+    min-height: 100% !important;
+    overflow: visible !important;
     background: white !important;
-    color: black !important;
-    font-size: 12pt;
+    color: #0f172a !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 10pt !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   /* Hide navigation, header, action buttons, toolbars, sidebars */
@@ -42,17 +54,82 @@
     display: none !important;
   }
 
+  /* Unfix all modals, overlays, and dialogs so multi-page documents flow cleanly across multiple pages */
+  .fixed, .absolute {
+    position: static !important;
+    inset: auto !important;
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+    width: 100% !important;
+    transform: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+  }
+
+  /* Remove backdrops, blurs, and shadows */
+  .backdrop-blur-xs, .backdrop-blur-sm, .backdrop-blur-md, [class*="backdrop-blur"] {
+    backdrop-filter: none !important;
+    background: transparent !important;
+  }
+
+  /* Remove height & overflow traps that cause single-page clipping */
+  .overflow-hidden, .overflow-y-auto, .overflow-x-auto, [class*="max-h-"] {
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+  }
+
   /* Make print container full width & unconstrained */
   .printable-document-container {
     box-shadow: none !important;
     border: none !important;
     margin: 0 !important;
-    padding: 0.5in !important;
+    padding: 0 !important;
     width: 100% !important;
     max-width: 100% !important;
   }
 
-  .page-break {
-    page-break-after: always;
+  /* Table styling for clean multi-page pagination */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto !important;
+  }
+
+  thead {
+    display: table-header-group !important; /* Repeats table header across every printed page */
+  }
+
+  tfoot {
+    display: table-footer-group !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  th, td {
+    font-size: 8.5pt !important;
+    line-height: 1.25 !important;
+    padding: 4px 6px !important;
+    border-color: #cbd5e1 !important;
+  }
+
+  /* Clean section breaks and card styling */
+  .page-break, .print-page-break {
+    page-break-before: always !important;
+    break-before: page !important;
+  }
+
+  .print-avoid-break {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .rounded-3xl, .rounded-2xl {
+    border-radius: 4px !important;
+    box-shadow: none !important;
   }
 }

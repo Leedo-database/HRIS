@@ -45,19 +45,6 @@ export interface ParsedAttendanceRow {
   error?: string;
 }
 
-export const SAMPLE_PASTE_DATA = `Office\tMurshida Akhter Kanta\t2\t2026-10-06 09:54:12\tC/In\t1\t0\tFP
-Office\tMurshida Akhter Kanta\t2\t2026-10-06 18:05:40\tC/Out\t1\t0\tFP
-Office\tMd. Habibur Rahman\t3\t2026-10-06 10:38:22\tC/In\t1\t0\tFP
-Office\tMd. Habibur Rahman\t3\t2026-10-06 18:15:10\tC/Out\t1\t0\tFP
-Office\tMd. Belal Hossain\t4\t2026-10-06 10:52:05\tC/In\t1\t0\tFP
-Office\tMd. Belal Hossain\t4\t2026-10-06 18:02:15\tC/Out\t1\t0\tFP
-Office\tRayhan\t10\t2026-10-06 09:48:00\tC/In\t1\t0\tFP
-Office\tRayhan\t10\t2026-10-06 18:00:00\tC/Out\t1\t0\tFP
-Office\tFarhana\t19\t2026-10-06 10:29:10\tC/In\t1\t0\tFP
-Office\tFarhana\t19\t2026-10-06 18:10:00\tC/Out\t1\t0\tFP
-Office\tFabiha Mustari\t27\t2026-10-06 10:45:00\tC/In\t1\t0\tFP
-Office\tFabiha Mustari\t27\t2026-10-06 18:00:00\tC/Out\t1\t0\tFP`;
-
 // Known Enroll No. mapping for LEEDO staff based on the official biometric machine config
 const KNOWN_ENROLL_MAP: Record<string, string> = {
   '2': '1002', // Murshida Akhter Kanta
@@ -95,26 +82,25 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
     const cleanNo = String(rawNo || '').trim();
     const cleanName = String(rawName || '').trim().toLowerCase();
 
-    // 1. By known Enroll No. mapping
+    // 1. By Employee ID exact match (e.g. 1002, 1004, 1057, 1067, 1075, 1079, 1089, 1090, 1100)
+    if (cleanNo) {
+      const matchById = employees.find((e) => e.id === cleanNo || e.id === `10${cleanNo.padStart(2, '0')}`);
+      if (matchById) return matchById;
+    }
+
+    // 2. By known Enroll No. mapping (for legacy 1-2 digit enroll numbers)
     if (cleanNo && KNOWN_ENROLL_MAP[cleanNo]) {
       const targetId = KNOWN_ENROLL_MAP[cleanNo];
       const match = employees.find((e) => e.id === targetId);
       if (match) return match;
     }
 
-    // 2. By Employee ID exact match
-    if (cleanNo) {
-      const matchById = employees.find((e) => e.id === cleanNo || e.id === `10${cleanNo.padStart(2, '0')}`);
-      if (matchById) return matchById;
-    }
-
     // 3. By Name substring / fuzzy matching
     if (cleanName) {
-      // First exact or starting with
       const matchName = employees.find((e) => {
         const full = e.fullName.toLowerCase();
         if (full.includes(cleanName) || cleanName.includes(full)) return true;
-        // Parts matching: e.g. "Habibi" in "Habibur", "Belal" in "Belal Hossain"
+        // Parts matching: e.g. "Habibur" in "Md. Habibur Rahman", "Omar Faruque" in "Md Omar Faruque"
         const cleanParts = cleanName.split(/[\s.]+/).filter((p) => p.length > 2);
         return cleanParts.some((part) => full.includes(part));
       });
@@ -124,22 +110,49 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
     return undefined;
   };
 
-  // Helper: Parse DD/MM/YYYY into YYYY-MM-DD
-  const normalizeDate = (dStr: string): string => {
-    if (!dStr) return '';
-    const clean = dStr.trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) return clean;
-    const parts = clean.split(/[-/]/);
-    if (parts.length === 3) {
-      if (parts[2].length === 4) {
-        // DD/MM/YYYY
-        return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-      } else if (parts[0].length === 4) {
-        // YYYY/MM/DD
-        return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
-      }
+  // Helper: Parse DD/MM/YYYY HH:mm:ss or YYYY-MM-DD HH:mm:ss accurately
+  const parseDateTimeString = (raw: string): { dateStr: string; timeStr: string } | null => {
+    if (!raw) return null;
+    const clean = raw.trim();
+    // Matches DD/MM/YYYY HH:mm:ss or YYYY-MM-DD HH:mm:ss
+    const match = clean.match(/^(\d{1,4})[-/.](\d{1,2})[-/.](\d{1,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+    if (!match) return null;
+
+    let y: number;
+    let m: number;
+    let d: number;
+
+    const p1 = parseInt(match[1], 10);
+    const p2 = parseInt(match[2], 10);
+    const p3 = parseInt(match[3], 10);
+
+    if (match[3].length === 4) {
+      // Format: DD/MM/YYYY (Standard in Bangladesh / UK / biometric exports)
+      d = p1;
+      m = p2;
+      y = p3;
+    } else if (match[1].length === 4) {
+      // Format: YYYY-MM-DD
+      y = p1;
+      m = p2;
+      d = p3;
+    } else {
+      // Fallback: DD/MM/YY
+      d = p1;
+      m = p2;
+      y = 2000 + (p3 % 100);
     }
-    return clean;
+
+    const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    let timeStr = '10:00:00';
+    if (match[4] !== undefined && match[5] !== undefined) {
+      const hh = String(match[4]).padStart(2, '0');
+      const mm = String(match[5]).padStart(2, '0');
+      const ss = match[6] !== undefined ? String(match[6]).padStart(2, '0') : '00';
+      timeStr = `${hh}:${mm}:${ss}`;
+    }
+
+    return { dateStr, timeStr };
   };
 
   // Tokenize line across tabs, commas, semicolons, pipes, or multiple spaces
@@ -161,7 +174,8 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
     return trimmed.split(/\s{2,}/).map((c) => c.replace(/^"|"$/g, '').trim()).filter((c) => c.length > 0);
   };
 
-  // Universal Biometric Machine Log Parser (Multi-Punch, Single Punch, CSV, and Tab Delimited)
+  // Universal Biometric Machine Log Parser
+  // Directly supports the 7-column Excel export: Department | Name | Date/Time | Status | ID Number | Workcode | VerifyCode
   const processText = (content: string) => {
     if (!content || !content.trim()) return;
     const rawLines = content.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
@@ -183,8 +197,10 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
       // Skip header lines
       if (
         (lower.includes('department') && lower.includes('name')) ||
+        (lower.includes('date/time') && lower.includes('status')) ||
+        (lower.includes('id number') || lower.includes('verifycode')) ||
         (lower.includes('ac-no') && lower.includes('date')) ||
-        (lower.includes('employee id') && lower.includes('time'))
+        (lower.includes('workcode'))
       ) {
         continue;
       }
@@ -198,56 +214,67 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
       let foundName = '';
       let foundStatus = '';
 
-      // Analyze each token
-      for (const col of cols) {
-        const colClean = col.trim();
+      // Pattern 1: Exact 7-column Excel export as in image_646b12ac.png
+      // Col 0: Department (e.g. Office)
+      // Col 1: Name (e.g. Murshida Akhter Kanta, Md Omar Faruque)
+      // Col 2: Date/Time (e.g. 10/10/2026 22:10:42)
+      // Col 3: Status (e.g. C/In)
+      // Col 4: ID Number (e.g. 1002, 1004, 1057)
+      // Col 5: Workcode (e.g. 0)
+      // Col 6: VerifyCode (e.g. FP)
+      const dateTimeParsedCol2 = cols.length >= 4 ? parseDateTimeString(cols[2]) : null;
+      const isIdCol4 = cols.length >= 5 && /^\d{2,6}$/.test(cols[4].trim());
 
-        // 1. Check for combined Date & Time (e.g. 01/09/2026 09:56:58 or 2026-10-06 10:35:00)
-        const combinedMatch = colClean.match(/^(\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4})\s+(\d{1,2}:\d{2}(?::\d{2})?)/);
-        if (combinedMatch) {
-          foundDate = normalizeDate(combinedMatch[1]);
-          foundTimes.push(combinedMatch[2]);
-          continue;
-        }
+      if (dateTimeParsedCol2 && isIdCol4) {
+        foundName = cols[1].trim();
+        foundDate = dateTimeParsedCol2.dateStr;
+        foundTimes.push(dateTimeParsedCol2.timeStr);
+        foundStatus = cols[3].trim();
+        foundNo = cols[4].trim();
+      } else {
+        // Pattern 2: Generic token extraction fallback for varied CSV or biometric machine outputs
+        for (const col of cols) {
+          const colClean = col.trim();
 
-        // 2. Check for pure Date
-        const dateMatch = colClean.match(/^(\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4})$/);
-        if (dateMatch && !foundDate) {
-          foundDate = normalizeDate(dateMatch[1]);
-          continue;
-        }
+          // Combined Date & Time token
+          const dt = parseDateTimeString(colClean);
+          if (dt && colClean.includes(':') && !foundDate) {
+            foundDate = dt.dateStr;
+            foundTimes.push(dt.timeStr);
+            continue;
+          }
 
-        // 3. Check for Time (HH:mm:ss or HH:mm)
-        const timeMatch = colClean.match(/^(\d{1,2}:\d{2}(?::\d{2})?)$/);
-        if (timeMatch) {
-          foundTimes.push(timeMatch[1]);
-          continue;
-        }
+          // Pure time token (HH:mm:ss)
+          const timeMatch = colClean.match(/^(\d{1,2}:\d{2}(?::\d{2})?)$/);
+          if (timeMatch) {
+            foundTimes.push(timeMatch[1]);
+            continue;
+          }
 
-        // 4. Check for Machine Enroll No / Staff ID
-        if (/^\d{1,6}$/.test(colClean)) {
-          if (!foundNo) {
+          // Machine Enroll No / Staff ID
+          if (/^\d{3,6}$/.test(colClean) && !foundNo) {
             foundNo = colClean;
+            continue;
+          } else if (/^\d{1,2}$/.test(colClean) && !foundNo && !foundTimes.length) {
+            foundNo = colClean;
+            continue;
           }
-          continue;
-        }
 
-        // 5. Check for Status keywords
-        const colLower = colClean.toLowerCase();
-        if (['c/in', 'c/out', 'in', 'out', 'fp', 'late', 'present', 'absent', 'office', 'head office'].includes(colLower)) {
-          if (colLower.includes('late') || colLower.includes('absent') || colLower.includes('in') || colLower.includes('out')) {
+          // Status keywords
+          const colLower = colClean.toLowerCase();
+          if (['c/in', 'c/out', 'in', 'out', 'late', 'present', 'absent'].includes(colLower)) {
             foundStatus = colClean;
+            continue;
           }
-          continue;
-        }
 
-        // 6. Otherwise this is likely the Name
-        if (!foundName && /[a-zA-Z\u0980-\u09FF]/.test(colClean)) {
-          foundName = colClean;
+          // Name token (alphabetic string)
+          if (!foundName && /[a-zA-Z\u0980-\u09FF]{3,}/.test(colClean) && !['office', 'headoffice', 'station', 'dept'].includes(colLower)) {
+            foundName = colClean;
+          }
         }
       }
 
-      // If no date found in row, default to current date
+      // Default date to current date if missing
       if (!foundDate) {
         foundDate = new Date().toISOString().split('T')[0];
       }
@@ -327,7 +354,6 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
     // Sort descending by date, then name
     results.sort((a, b) => b.normalizedDate.localeCompare(a.normalizedDate) || a.rawName.localeCompare(b.rawName));
     setParsedRows(results);
-    setHasParsed(true);
   };
 
   // 1-Click Load from User's Attached Biometric Sheet
@@ -591,47 +617,61 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
 
           {/* Paste Textarea Mode */}
           {importMode === 'paste' && (
-            <div className="space-y-2 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+            <div className="space-y-2.5 bg-slate-50 p-4 rounded-2xl border border-slate-200">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
                   <label className="font-bold text-slate-800 text-sm block">
                     Paste Biometric Log Rows (মেশিন বা এক্সেল থেকে কপি করে পেস্ট করুন):
                   </label>
                   <p className="text-[11px] text-slate-500">
-                    Supports ZKTeco, Realtime, eTime, tab-separated, comma-separated, or multi-space copied rows.
+                    Format: <span className="font-mono font-semibold text-slate-700">Department | Name | Date/Time | Status | ID Number | Workcode | VerifyCode</span>
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRawText(SAMPLE_PASTE_DATA);
-                      processText(SAMPLE_PASTE_DATA);
-                    }}
-                    className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold rounded-xl cursor-pointer transition-colors shadow-2xs flex items-center gap-1"
-                    title="Load sample copy-pasted machine data with on-time & late punches"
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                    <span>Paste Sample Data (নমুনা পেস্ট)</span>
-                  </button>
+                  {rawText && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRawText('');
+                        setParsedRows([]);
+                        setHasParsed(false);
+                      }}
+                      className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl cursor-pointer transition-colors shadow-2xs flex items-center gap-1"
+                      title="Clear pasted text"
+                    >
+                      <X className="w-3.5 h-3.5 text-slate-600" />
+                      <span>Clear (মুছুন)</span>
+                    </button>
+                  )}
 
                   <button
                     type="button"
                     onClick={() => processText(rawText)}
-                    className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl cursor-pointer shadow-xs transition-all flex items-center gap-1"
+                    disabled={!rawText.trim()}
+                    className={`px-4 py-1.5 font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5 ${
+                      rawText.trim()
+                        ? 'bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer'
+                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    }`}
                   >
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Parse Pasted Rows</span>
+                    <span>Parse Pasted Rows ({rawText.split('\n').filter(l => l.trim()).length} lines)</span>
                   </button>
                 </div>
               </div>
               <textarea
-                rows={5}
+                rows={6}
                 value={rawText}
                 onChange={(e) => setRawText(e.target.value)}
-                placeholder="Department   Name   No.   Date/Time   Status&#10;Office   Murshida Akhter   2   2026-10-06 09:54:12   C/In&#10;Office   Md. Habibur Rahman   3   2026-10-06 10:38:22   C/In (Late)..."
-                className="w-full p-3 font-mono text-[11px] border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white"
+                placeholder={"Department\tName\tDate/Time\tStatus\tID Number\tWorkcode\tVerifyCode\nOffice\tMurshida Akhter Kanta\t10/10/2026 22:10:42\tC/In\t1002\t0\tFP\nOffice\tMd. Habibur Rahman\t01/10/2026 10:01:30\tC/In\t1004\t0\tFP\nOffice\tMd Omar Faruque\t08/10/2026 17:36:47\tC/In\t1057\t0\tFP\nOffice\tMd. Rayhan Khan Hira\t06/10/2026 12:15:49\tC/In\t1067\t0\tFP"}
+                className="w-full p-3 font-mono text-[11px] border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white"
               />
+              <div className="flex items-center justify-between text-[11px] text-slate-500 px-1">
+                <span>
+                  💡 Excel বা বায়োমেট্রিক সফটওয়্যার থেকে কলামগুলো সিলেক্ট করে কপি (Ctrl+C) করে এখানে সরাসরি পেস্ট (Ctrl+V) করুন।
+                </span>
+                <span>স্বয়ংক্রিয়ভাবে ইন-টাইম, আউট-টাইম ও লেট ক্যালকুলেট হবে।</span>
+              </div>
             </div>
           )}
 

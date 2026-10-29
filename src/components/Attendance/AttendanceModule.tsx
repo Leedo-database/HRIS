@@ -25,7 +25,8 @@ import {
   AlertTriangle,
   Moon,
   Zap,
-  Edit
+  Edit,
+  Printer
 } from 'lucide-react';
 import { getTodayAttendanceSummary, getHolidayOnDate } from '../../utils/calculations';
 import { GovernmentHoliday } from '../../types/hris';
@@ -991,14 +992,26 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
             </select>
           </div>
 
-          <button
-            type="button"
-            onClick={exportAttendanceCSV}
-            className="flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3 py-2 rounded-xl border border-slate-200 transition-colors cursor-pointer shadow-2xs self-end sm:self-auto"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Export CSV</span>
-          </button>
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer shadow-2xs"
+              title="Print Daily Attendance Register"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Print Register</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={exportAttendanceCSV}
+              className="flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3 py-2 rounded-xl border border-slate-200 transition-colors cursor-pointer shadow-2xs"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export CSV</span>
+            </button>
+          </div>
         </div>
 
         {/* Table Records */}

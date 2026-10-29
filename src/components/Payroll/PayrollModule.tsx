@@ -915,8 +915,8 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
 
       {/* Bank Advice Sheet Modal */}
       {showBankAdvice && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-4xl rounded-2xl shadow-xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:p-0 print:bg-white print:static print:z-auto print:block">
+          <div className="bg-white w-full max-w-4xl rounded-2xl shadow-xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh] print:max-h-none print:h-auto print:shadow-none print:border-none print:w-full print:max-w-none print:block">
             <div className="p-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <FileSpreadsheet className="w-5 h-5 text-emerald-400" />
@@ -982,8 +982,8 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
 
       {/* Official Printable Payslip Modal */}
       {activePayslip && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[95vh]">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:p-0 print:bg-white print:static print:z-auto print:block">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[95vh] print:max-h-none print:h-auto print:shadow-none print:border-none print:w-full print:max-w-none print:block">
             <div className="no-print p-4 bg-slate-900 text-white flex items-center justify-between">
               <span className="font-bold text-sm">Official Employee Payslip Preview</span>
               <div className="flex items-center gap-2">

@@ -1427,8 +1427,8 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
         });
 
         return (
-          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-            <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[94vh]">
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 print:p-0 print:bg-white print:static print:z-auto print:block">
+            <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[94vh] print:max-h-none print:h-auto print:shadow-none print:border-none print:w-full print:max-w-none print:block">
               {/* Modal Control Header (hidden during print) */}
               <div className="no-print p-4 bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
@@ -1482,7 +1482,7 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                     className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-sm whitespace-nowrap"
                   >
                     <Printer className="w-3.5 h-3.5" />
-                    <span>Print Monthly Docket (A4)</span>
+                    <span>Print Monthly Timesheet (প্রিন্ট)</span>
                   </button>
                   <button
                     type="button"
@@ -1728,8 +1728,8 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
           : baseStaff.filter(e => e.workStation === masterFilterStation || e.jobLocations?.includes(masterFilterStation as any));
 
         return (
-          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-            <div className="bg-white w-full max-w-5xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[95vh]">
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 print:p-0 print:bg-white print:static print:z-auto print:block">
+            <div className="bg-white w-full max-w-5xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[95vh] print:max-h-none print:h-auto print:shadow-none print:border-none print:w-full print:max-w-none print:block">
               {/* Modal Control Header (hidden during print) */}
               <div className="no-print p-4 bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
@@ -1925,8 +1925,8 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
         });
 
         return (
-          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-            <div className="bg-white w-full max-w-5xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[95vh]">
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 print:p-0 print:bg-white print:static print:z-auto print:block">
+            <div className="bg-white w-full max-w-5xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[95vh] print:max-h-none print:h-auto print:shadow-none print:border-none print:w-full print:max-w-none print:block">
               {/* Modal Control Header (hidden during print) */}
               <div className="no-print p-4 bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
@@ -1969,7 +1969,7 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                     className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-sm whitespace-nowrap"
                   >
                     <Printer className="w-3.5 h-3.5" />
-                    <span>Print Exception Register (A4)</span>
+                    <span>Print Exception Timesheet (প্রিন্ট)</span>
                   </button>
                   <button
                     type="button"
