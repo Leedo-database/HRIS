@@ -105,6 +105,20 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     return false;
   });
   const userLateDaysCount = userLateRecords.length;
+  const userLateArrivalRate = userMonthAttendance.length > 0 
+    ? Math.round((userLateDaysCount / userMonthAttendance.length) * 100) 
+    : 0;
+
+  // Leave balances for current user
+  const userApprovedCasualLeaves = leaves
+    .filter((l) => l.employeeId === currentUser.id && l.status === 'Approved' && (l.leaveType === 'Annual/Casual' || (l.leaveType as string) === 'Casual'))
+    .reduce((sum, l) => sum + (Number(l.daysCount) || 1), 0);
+  const userApprovedSickLeaves = leaves
+    .filter((l) => l.employeeId === currentUser.id && l.status === 'Approved' && (l.leaveType === 'Medical/Sick' || (l.leaveType as string) === 'Sick'))
+    .reduce((sum, l) => sum + (Number(l.daysCount) || 1), 0);
+  const userCasualQuota = currentUser.casualLeaveQuota ?? 16;
+  const userSickQuota = currentUser.sickLeaveQuota ?? 14;
+  const userRemainingLeaves = Math.max(0, (userCasualQuota - userApprovedCasualLeaves) + (userSickQuota - userApprovedSickLeaves));
 
   // Calculate total late delay minutes
   let userTotalLateMinutes = 0;
@@ -155,7 +169,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   // =============================================================
   // VIEW A: Regular Staff Member Dashboard (Strictly Personal)
   // =============================================================
-  if (currentRole === 'employee') {
+  if (currentRole !== 'hr_admin') {
     return (
       <div className="space-y-6">
         {/* Employee Welcome & Monthly Banner */}
@@ -217,17 +231,17 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             </div>
           </div>
 
-          {/* Card 2: Late Days Count & Minutes Delay */}
+          {/* Card 2: Late Arrival Rate & Late Days Count */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Late Days (বিলম্ব)</span>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Late Arrival Rate (দেরির হার)</span>
               <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
                 <Clock className="w-4 h-4" />
               </div>
             </div>
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-black text-amber-600">{userLateDaysCount}</span>
-              <span className="text-xs text-slate-500 font-medium">Days with delay</span>
+              <span className="text-3xl font-black text-amber-600">{userLateArrivalRate}%</span>
+              <span className="text-xs text-slate-500 font-medium">({userLateDaysCount} days late)</span>
             </div>
             <div className="mt-2 text-[11px] text-slate-500 flex items-center justify-between border-t border-slate-100 pt-2">
               <span>Total Delay: {userTotalLateMinutes} mins</span>
@@ -237,10 +251,10 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             </div>
           </div>
 
-          {/* Card 3: Leaves Taken */}
+          {/* Card 3: Leaves Taken & Quotas */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Leaves Taken (ছুটি)</span>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Leave Information (ছুটি)</span>
               <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
                 <Calendar className="w-4 h-4" />
               </div>
@@ -250,8 +264,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               <span className="text-xs text-slate-500 font-medium">Days Approved</span>
             </div>
             <div className="mt-2 text-[11px] text-slate-500 flex items-center justify-between border-t border-slate-100 pt-2">
-              <span>Casual: 1/14</span>
-              <span>Sick: 0/14</span>
+              <span>Casual: {userApprovedCasualLeaves}/{userCasualQuota} • Sick: {userApprovedSickLeaves}/{userSickQuota}</span>
+              <span className="text-indigo-600 font-bold">{userRemainingLeaves}d left</span>
             </div>
           </div>
 
@@ -487,9 +501,30 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </div>
       </div>
 
-      {/* Top Organization KPI Cards: Absenteeism, Turnover, New Joinees, Late Arrival */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* KPI 1: Absenteeism Rate % (অনুপস্থিতির হার) */}
+      {/* Top Organization KPI Cards: Active Staff, Absenteeism, Turnover, New Joinees, Late Arrival */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        {/* KPI 1: Active Employees (সক্রিয় কর্মী সংখ্যা) */}
+        <div 
+          onClick={() => onNavigateTab('employees')}
+          className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-indigo-300 transition-all cursor-pointer group"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Active Employees</span>
+            <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+              <Users className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-3xl font-black text-indigo-700">{activeEmployees.length}</span>
+            <span className="text-xs text-slate-500 font-medium">/ {employees.length} Staff</span>
+          </div>
+          <div className="mt-2 text-[11px] text-slate-500 flex items-center justify-between border-t border-slate-100 pt-2">
+            <span>সক্রিয় কর্মী সংখ্যা</span>
+            <span className="text-emerald-600 font-bold">Verified Active</span>
+          </div>
+        </div>
+
+        {/* KPI 2: Absenteeism Rate % (অনুপস্থিতির হার) */}
         <div 
           onClick={() => onNavigateTab('attendance')}
           className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-rose-300 transition-all cursor-pointer group"
@@ -512,7 +547,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
         </div>
 
-        {/* KPI 2: Staff Turnover Rate % (কর্মী টার্নওভার হার) */}
+        {/* KPI 3: Staff Turnover Rate % (কর্মী টার্নওভার হার) */}
         <div 
           onClick={() => onNavigateTab('separation')}
           className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-blue-300 transition-all cursor-pointer group"
@@ -533,7 +568,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
         </div>
 
-        {/* KPI 3: New Joinees (নতুন যোগদানকারী) */}
+        {/* KPI 4: New Joinees (নতুন যোগদানকারী) */}
         <div 
           onClick={() => onNavigateTab('employees')}
           className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-emerald-300 transition-all cursor-pointer group"
@@ -554,7 +589,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
         </div>
 
-        {/* KPI 4: Late Arrival Rate (দেরিতে উপস্থিতি হার) */}
+        {/* KPI 5: Late Arrival Rate (দেরিতে উপস্থিতি হার) */}
         <div 
           onClick={() => onNavigateTab('attendance')}
           className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-amber-300 transition-all cursor-pointer group"

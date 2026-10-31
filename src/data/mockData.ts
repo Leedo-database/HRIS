@@ -37,27 +37,7 @@ export const INITIAL_EMPLOYEES: Employee[] = LEEDO_MASTER_EMPLOYEES;
 
 export const INITIAL_SEPARATIONS: SeparationRecord[] = [];
 
-export const INITIAL_VISITS: VisitAuthorization[] = [
-  {
-    id: 'VISIT-2026-01',
-    employeeId: '1007',
-    employeeName: 'Athui Marma',
-    department: 'Program & Operation',
-    destination: 'Kamalapur & Sadarghat Field Hubs',
-    purpose: 'Emergency vulnerable child family tracing & shelter monitoring assessment',
-    startDate: '2026-10-18',
-    endDate: '2026-10-21',
-    assignedProject: 'Child Protection & Street Hub',
-    modeOfTransport: 'Field Vehicle & Public Transit',
-    estimatedExpense: 6500,
-    supervisorRecommendation: 'Recommended',
-    supervisorRemarks: 'High priority child protection visit.',
-    supervisorName: 'Murshida Akhter Kanta',
-    status: 'Approved',
-    appliedDate: '2026-10-11',
-    approvedBy: 'Md. Omar Faruque (Manager HR & Admin)',
-  },
-];
+export const INITIAL_VISITS: VisitAuthorization[] = [];
 
 export const INITIAL_ATTENDANCE: AttendanceRecord[] = [
   ...generateOctoberBiometricAttendance(),
@@ -81,50 +61,7 @@ export const INITIAL_ATTENDANCE: AttendanceRecord[] = [
   },
 ];
 
-export const INITIAL_LEAVES: LeaveRequest[] = [
-  {
-    id: 'LR-2026-081',
-    employeeId: '1004',
-    employeeName: 'Md. Habibur Rahman',
-    department: 'Admin & Finance',
-    leaveType: 'Annual/Casual',
-    startDate: '2026-10-22',
-    endDate: '2026-10-24',
-    daysCount: 3,
-    reason: 'Attending family program and urgent personal affair',
-    handoverPersonId: '1012',
-    handoverPersonName: 'Farhana Akter',
-    handoverStatus: 'Accepted',
-    handoverComment: 'Coordinated pending payroll records and desk files.',
-    supervisorRecommendation: 'Recommended',
-    supervisorName: 'Murshida Akhter Kanta',
-    supervisorRemarks: 'Workload coordinated with Admin team.',
-    status: 'Pending HR Approval',
-    appliedDate: '2026-10-12',
-    approverRemarks: 'Under review by Executive Director',
-  },
-  {
-    id: 'LR-2026-079',
-    employeeId: '1007',
-    employeeName: 'Athui Marma',
-    department: 'Program & Operation',
-    leaveType: 'Compensatory/Field Rest',
-    startDate: '2026-10-15',
-    endDate: '2026-10-16',
-    daysCount: 2,
-    reason: 'Field rest after emergency night street children rescue mission',
-    handoverPersonId: '1003',
-    handoverPersonName: 'AM Shmsuddula',
-    handoverStatus: 'Accepted',
-    supervisorRecommendation: 'Recommended',
-    supervisorName: 'Forhad Hossain',
-    supervisorRemarks: 'Staff completed 48 hours continuous night emergency operation.',
-    status: 'Approved',
-    appliedDate: '2026-10-10',
-    approvedBy: 'Murshida Akhter Kanta (Director - Admin & Finance)',
-    approverRemarks: 'Approved under NGO compensatory field rest policy.',
-  },
-];
+export const INITIAL_LEAVES: LeaveRequest[] = [];
 
 export const INITIAL_LEAVE_BALANCES: Record<string, LeaveBalance> = {
   '1001': {

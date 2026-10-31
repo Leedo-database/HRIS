@@ -1,4 +1,4 @@
-import { Employee } from '../types/hris';
+import { Employee, UserRole } from '../types/hris';
 import { LEEDO_MASTER_EMPLOYEES } from '../data/leedoStaffDatabase';
 
 export const STORAGE_KEYS = {
@@ -29,7 +29,11 @@ export const VALID_LEEDO_ID_MAP = new Map<string, string>(
 
 export function isValidLeedoStaffId(id: string | null | undefined): boolean {
   if (!id) return false;
-  return VALID_LEEDO_ID_MAP.has(String(id).trim());
+  const str = String(id).trim();
+  if (!str) return false;
+  // Disallow old dummy mock IDs and separated legacy mock accounts
+  if (LEGACY_MOCK_IDS.has(str) || str === '1006') return false;
+  return true;
 }
 
 export const LEGACY_MOCK_IDS = new Set([
@@ -55,12 +59,15 @@ export const LEGACY_MOCK_NAMES = new Set([
 
 export function isLegacyMockEmployee(emp: Partial<Employee> | null | undefined): boolean {
   if (!emp) return false;
-  if (emp.id && (LEGACY_MOCK_IDS.has(emp.id.trim()) || !VALID_LEEDO_ID_MAP.has(emp.id.trim()))) return true;
+  if (emp.id) {
+    const id = String(emp.id).trim();
+    if (LEGACY_MOCK_IDS.has(id) || id === '1006') return true;
+  }
   if (emp.fullName && LEGACY_MOCK_NAMES.has(emp.fullName.trim())) return true;
   return false;
 }
 
-// Guarantee LEEDO master employees are always loaded and synced with any local changes
+// Guarantee LEEDO master employees are always loaded and synced with any local changes, preserving all newly added staff (like 1100)
 export function loadMergedEmployees(): Employee[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.EMPLOYEES);
@@ -73,7 +80,7 @@ export function loadMergedEmployees(): Employee[] {
       }
     }
 
-    // Filter out legacy mock employees (Anisur, Nusrat, Tanvir, Sabrina, Kamrul, Tahmina)
+    // Keep all authentic master employees AND any newly added employees, filtering out ONLY legacy mock employees
     const validExisting = Array.isArray(parsed)
       ? parsed.filter((e) => e && e.id && !isLegacyMockEmployee(e))
       : [];
@@ -133,15 +140,15 @@ export function loadMergedEmployees(): Employee[] {
   }
 }
 
-// Check if v6.0 migration is needed (clears any non-LEEDO test mock records and purges separated user 1006)
+// Check if v7.0 migration is needed (clears any non-LEEDO test mock records, clears demo leaves/visits/separations, and purges separated user 1006)
 export function ensureV2Migration(): void {
   try {
     const migrated = localStorage.getItem(STORAGE_KEYS.MIGRATION_VERSION);
-    if (migrated !== '6.0') {
-      // 1. Purge & load authentic employees
+    if (migrated !== '7.0') {
+      // 1. Purge & load authentic employees (including custom newly added staff)
       loadMergedEmployees();
 
-      // 2. Clean attendance - only authentic LEEDO staff IDs allowed
+      // 2. Clean attendance - only authentic staff IDs allowed
       const rawAtt = localStorage.getItem(STORAGE_KEYS.ATTENDANCE);
       if (rawAtt) {
         try {
@@ -155,35 +162,46 @@ export function ensureV2Migration(): void {
         } catch { /* ignore */ }
       }
 
-      // 3. Clean leaves - only authentic LEEDO staff allowed
+      // 3. Clean leaves - wipe demo leaves (LR-2026-081, LR-2026-079)
       const rawLeaves = localStorage.getItem(STORAGE_KEYS.LEAVES);
       if (rawLeaves) {
         try {
           const lvs = JSON.parse(rawLeaves);
           if (Array.isArray(lvs)) {
             const cleaned = lvs.filter((l: any) => 
-              l && l.employeeId && isValidLeedoStaffId(l.employeeId) && !LEGACY_MOCK_NAMES.has((l.employeeName || '').trim())
+              l && l.employeeId && isValidLeedoStaffId(l.employeeId) && 
+              !LEGACY_MOCK_NAMES.has((l.employeeName || '').trim()) &&
+              l.id !== 'LR-2026-081' && l.id !== 'LR-2026-079'
             );
             localStorage.setItem(STORAGE_KEYS.LEAVES, JSON.stringify(cleaned));
           }
         } catch { /* ignore */ }
+      } else {
+        localStorage.setItem(STORAGE_KEYS.LEAVES, JSON.stringify([]));
       }
 
-      // 4. Clean separations - wipe demo separations completely
-      const rawSeps = localStorage.getItem(STORAGE_KEYS.SEPARATIONS);
-      if (rawSeps) {
+      // 4. Clean visits - wipe demo visits (VISIT-2026-01)
+      const rawVisits = localStorage.getItem(STORAGE_KEYS.VISITS);
+      if (rawVisits) {
         try {
-          const seps = JSON.parse(rawSeps);
-          if (Array.isArray(seps)) {
-            const cleaned = seps.filter((s: any) => 
-              s && s.employeeId && isValidLeedoStaffId(s.employeeId) && !LEGACY_MOCK_NAMES.has((s.employeeName || '').trim())
+          const vis = JSON.parse(rawVisits);
+          if (Array.isArray(vis)) {
+            const cleaned = vis.filter((v: any) => 
+              v && v.employeeId && isValidLeedoStaffId(v.employeeId) && 
+              !LEGACY_MOCK_NAMES.has((v.employeeName || '').trim()) &&
+              v.id !== 'VISIT-2026-01'
             );
-            localStorage.setItem(STORAGE_KEYS.SEPARATIONS, JSON.stringify(cleaned));
+            localStorage.setItem(STORAGE_KEYS.VISITS, JSON.stringify(cleaned));
           }
         } catch { /* ignore */ }
+      } else {
+        localStorage.setItem(STORAGE_KEYS.VISITS, JSON.stringify([]));
       }
 
-      // 5. Clean timesheets
+      // 5. Clean separations - wipe demo separations completely
+      localStorage.setItem(STORAGE_KEYS.SEPARATIONS, JSON.stringify([]));
+
+      // 6. Clean timesheets
       const rawTs = localStorage.getItem(STORAGE_KEYS.TIMESHEETS);
       if (rawTs) {
         try {
@@ -197,7 +215,7 @@ export function ensureV2Migration(): void {
         } catch { /* ignore */ }
       }
 
-      // 6. Clean payroll
+      // 7. Clean payroll
       const rawPay = localStorage.getItem(STORAGE_KEYS.PAYROLL);
       if (rawPay) {
         try {
@@ -211,13 +229,13 @@ export function ensureV2Migration(): void {
         } catch { /* ignore */ }
       }
 
-      // 7. Clean current user if logged into legacy mock ID or separated staff like 1006 (Rashed)
+      // 8. Clean current user if logged into legacy mock ID or separated staff like 1006 (Rashed)
       const curUserId = localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID);
       if (!curUserId || curUserId === '1006' || !isValidLeedoStaffId(curUserId) || LEGACY_MOCK_IDS.has(curUserId)) {
         localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, '1057'); // Md. Omar Faruque (Manager HR & Admin)
       }
 
-      // 8. Also ensure stored company profile has the active HR signatory
+      // 9. Also ensure stored company profile has the active HR signatory
       const rawCompany = localStorage.getItem(STORAGE_KEYS.COMPANY);
       if (rawCompany) {
         try {
@@ -230,11 +248,76 @@ export function ensureV2Migration(): void {
         } catch { /* ignore */ }
       }
 
-      localStorage.setItem(STORAGE_KEYS.MIGRATION_VERSION, '6.0');
+      localStorage.setItem(STORAGE_KEYS.MIGRATION_VERSION, '7.0');
     }
   } catch (e) {
     console.error('Migration check failed:', e);
   }
+}
+
+// Merge cloud employees with local storage without ever deleting custom newly added staff (such as ID 1100)
+export function mergePreservingCustomEmployees(cloudList: Employee[], currentList: Employee[]): Employee[] {
+  const map = new Map<string, Employee>();
+  
+  // 1. First populate all authentic master employees
+  LEEDO_MASTER_EMPLOYEES.forEach((emp) => {
+    map.set(emp.id.trim(), emp);
+  });
+
+  // 2. Merge local employees (preserving all custom staff like ID 1100)
+  (currentList || []).forEach((emp) => {
+    if (emp && emp.id && isValidLeedoStaffId(emp.id) && !isLegacyMockEmployee(emp)) {
+      const existing = map.get(emp.id.trim());
+      map.set(emp.id.trim(), existing ? { ...existing, ...emp } : emp);
+    }
+  });
+
+  // 3. Merge cloud employees
+  (cloudList || []).forEach((emp) => {
+    if (emp && emp.id && isValidLeedoStaffId(emp.id) && !isLegacyMockEmployee(emp)) {
+      const existing = map.get(emp.id.trim());
+      map.set(emp.id.trim(), existing ? { ...existing, ...emp } : emp);
+    }
+  });
+
+  return Array.from(map.values());
+}
+
+// Strict organization role resolution: Only true HR leadership gets 'hr_admin'
+export function resolveEmployeeRole(emp: Partial<Employee> | null | undefined): UserRole {
+  if (!emp || !emp.id) return 'employee';
+  const id = String(emp.id).trim();
+  // 1001: Founder & Executive Director, 1002: Director (Admin & Finance), 1057: Manager HR & Admin
+  if (id === '1001' || id === '1002' || id === '1057') return 'hr_admin';
+  
+  const des = (emp.designation || '').toLowerCase();
+  const dept = (emp.department || '').toLowerCase();
+
+  // Strict HR Executive roles ONLY:
+  if (
+    des.includes('manager hr') ||
+    des.includes('hr & admin') ||
+    des.includes('human resources manager') ||
+    des.includes('head of hr') ||
+    des.includes('executive director') ||
+    (des.includes('director') && (dept.includes('admin') || dept.includes('hr') || dept.includes('executive')))
+  ) {
+    return 'hr_admin';
+  }
+
+  // Line managers / coordinators
+  if (
+    des.includes('coordinator') || 
+    des.includes('manager') || 
+    des.includes('head') || 
+    des.includes('lead') || 
+    des.includes('in-charge') || 
+    des.includes('doctor')
+  ) {
+    return 'line_manager';
+  }
+
+  return 'employee';
 }
 
 // Execute migration synchronously on module import

@@ -346,7 +346,8 @@ export async function fetchLeavesFromCloud(): Promise<LeaveRequest[]> {
       const list: LeaveRequest[] = [];
       for (const d of snap.docs) {
         const lv = d.data() as LeaveRequest;
-        if (lv && lv.employeeId && isValidLeedoStaffId(lv.employeeId) && !LEGACY_MOCK_NAMES.has((lv.employeeName || '').trim())) {
+        const isDemo = d.id === 'LR-2026-081' || d.id === 'LR-2026-079';
+        if (!isDemo && lv && lv.employeeId && isValidLeedoStaffId(lv.employeeId) && !LEGACY_MOCK_NAMES.has((lv.employeeName || '').trim())) {
           list.push(lv);
         } else {
           deleteDoc(doc(db, path, d.id)).catch(() => {});
@@ -354,14 +355,9 @@ export async function fetchLeavesFromCloud(): Promise<LeaveRequest[]> {
       }
       return list;
     }
-    for (const l of INITIAL_LEAVES) {
-      if (isValidLeedoStaffId(l.employeeId)) {
-        await setDoc(doc(db, 'leaves', l.id), l);
-      }
-    }
-    return INITIAL_LEAVES;
+    return [];
   } catch {
-    return INITIAL_LEAVES;
+    return [];
   }
 }
 
@@ -374,13 +370,14 @@ export function subscribeLeavesFromCloud(onData: (leaves: LeaveRequest[]) => voi
         const list: LeaveRequest[] = [];
         snapshot.forEach((d) => {
           const lv = d.data() as LeaveRequest;
-          if (lv && lv.employeeId && isValidLeedoStaffId(lv.employeeId) && !LEGACY_MOCK_NAMES.has((lv.employeeName || '').trim())) {
+          const isDemo = d.id === 'LR-2026-081' || d.id === 'LR-2026-079';
+          if (!isDemo && lv && lv.employeeId && isValidLeedoStaffId(lv.employeeId) && !LEGACY_MOCK_NAMES.has((lv.employeeName || '').trim())) {
             list.push(lv);
           }
         });
-        if (list.length > 0) {
-          onData(list);
-        }
+        onData(list);
+      } else {
+        onData([]);
       }
     },
     (error) => {
@@ -469,7 +466,8 @@ export async function fetchVisitsFromCloud(): Promise<VisitAuthorization[]> {
       const list: VisitAuthorization[] = [];
       for (const d of snap.docs) {
         const v = d.data() as VisitAuthorization;
-        if (v && v.employeeId && isValidLeedoStaffId(v.employeeId) && !LEGACY_MOCK_NAMES.has((v.employeeName || '').trim())) {
+        const isDemo = d.id === 'VISIT-2026-01';
+        if (!isDemo && v && v.employeeId && isValidLeedoStaffId(v.employeeId) && !LEGACY_MOCK_NAMES.has((v.employeeName || '').trim())) {
           list.push(v);
         } else {
           deleteDoc(doc(db, path, d.id)).catch(() => {});
@@ -477,14 +475,9 @@ export async function fetchVisitsFromCloud(): Promise<VisitAuthorization[]> {
       }
       return list;
     }
-    for (const v of INITIAL_VISITS) {
-      if (isValidLeedoStaffId(v.employeeId)) {
-        await setDoc(doc(db, 'visits', v.id), v);
-      }
-    }
-    return INITIAL_VISITS;
+    return [];
   } catch {
-    return INITIAL_VISITS;
+    return [];
   }
 }
 
@@ -497,13 +490,14 @@ export function subscribeVisitsFromCloud(onData: (visits: VisitAuthorization[]) 
         const list: VisitAuthorization[] = [];
         snapshot.forEach((d) => {
           const v = d.data() as VisitAuthorization;
-          if (v && v.employeeId && isValidLeedoStaffId(v.employeeId) && !LEGACY_MOCK_NAMES.has((v.employeeName || '').trim())) {
+          const isDemo = d.id === 'VISIT-2026-01';
+          if (!isDemo && v && v.employeeId && isValidLeedoStaffId(v.employeeId) && !LEGACY_MOCK_NAMES.has((v.employeeName || '').trim())) {
             list.push(v);
           }
         });
-        if (list.length > 0) {
-          onData(list);
-        }
+        onData(list);
+      } else {
+        onData([]);
       }
     },
     (error) => {

@@ -40,7 +40,9 @@ import {
   ensureV2Migration,
   loadMergedEmployees,
   isValidLeedoStaffId,
-  LEGACY_MOCK_NAMES
+  LEGACY_MOCK_NAMES,
+  mergePreservingCustomEmployees,
+  resolveEmployeeRole
 } from './utils/storage';
 import { 
   fetchEmployeesFromCloud, 
@@ -224,13 +226,11 @@ export default function App() {
     const initialCreds: Record<string, UserCredential> = {};
     const masterEmps = loadMergedEmployees();
     masterEmps.forEach((emp) => {
-      const isHr = emp.id === '1001' || emp.id === '1002' || emp.designation?.includes('Director') || emp.department?.includes('Human Resources') || emp.department?.includes('Admin & Finance');
-      const isManager = emp.designation?.includes('Coordinator') || emp.designation?.includes('Manager') || emp.designation?.includes('Head') || emp.designation?.includes('Doctor');
       initialCreds[emp.id] = {
         employeeId: emp.id,
         password: emp.id, // default password is staff ID
         mustChangePassword: true,
-        role: isHr ? 'hr_admin' : isManager ? 'line_manager' : 'employee',
+        role: resolveEmployeeRole(emp),
       };
     });
     return initialCreds;
@@ -242,10 +242,7 @@ export default function App() {
     return session === 'true';
   });
 
-  // Current session & RBAC
-  const [currentRole, setCurrentRole] = useState<UserRole>(() =>
-    loadFromStorage(STORAGE_KEYS.CURRENT_ROLE, 'hr_admin')
-  );
+  // Current user state
   const [currentUser, setCurrentUser] = useState<Employee>(() => {
     const allEmps = loadMergedEmployees();
     const savedId = loadFromStorage(STORAGE_KEYS.CURRENT_USER_ID, '1057');
@@ -254,6 +251,16 @@ export default function App() {
       return matched;
     }
     return allEmps.find((e) => e.id === '1057') || allEmps.find((e) => e.id === '1001') || allEmps.find(isEmployeeActive) || allEmps[0];
+  });
+
+  // Current session & RBAC (Strictly synced with currentUser so non-HR staff always see personal dashboard)
+  const [currentRole, setCurrentRole] = useState<UserRole>(() => {
+    const savedRole = loadFromStorage<UserRole | null>(STORAGE_KEYS.CURRENT_ROLE, null);
+    const resolved = resolveEmployeeRole(currentUser);
+    if (resolved !== 'hr_admin') {
+      return resolved;
+    }
+    return savedRole || resolved;
   });
 
   // Navigation & UI controls
@@ -287,8 +294,18 @@ export default function App() {
     const unsubEmps = subscribeEmployeesFromCloud((cloudEmps) => {
       if (!isMounted) return;
       if (cloudEmps && cloudEmps.length > 0) {
-        setEmployees(cloudEmps);
-        saveToStorage(STORAGE_KEYS.EMPLOYEES, cloudEmps);
+        setEmployees((prev) => {
+          const merged = mergePreservingCustomEmployees(cloudEmps, prev);
+          saveToStorage(STORAGE_KEYS.EMPLOYEES, merged);
+          // Sync any local newly added staff (like ID 1100) up to Firestore
+          const cloudIds = new Set(cloudEmps.map((e) => e.id));
+          merged.forEach((emp) => {
+            if (!cloudIds.has(emp.id)) {
+              saveEmployeeToCloud(emp).catch(() => {});
+            }
+          });
+          return merged;
+        });
         setSyncStatus('synced');
       }
     });
@@ -369,8 +386,17 @@ export default function App() {
     // Fallback immediate fetches to populate quickly
     fetchEmployeesFromCloud().then((cloudEmps) => {
       if (isMounted && cloudEmps && cloudEmps.length > 0) {
-        setEmployees(cloudEmps);
-        saveToStorage(STORAGE_KEYS.EMPLOYEES, cloudEmps);
+        setEmployees((prev) => {
+          const merged = mergePreservingCustomEmployees(cloudEmps, prev);
+          saveToStorage(STORAGE_KEYS.EMPLOYEES, merged);
+          const cloudIds = new Set(cloudEmps.map((e) => e.id));
+          merged.forEach((emp) => {
+            if (!cloudIds.has(emp.id)) {
+              saveEmployeeToCloud(emp).catch(() => {});
+            }
+          });
+          return merged;
+        });
       }
     });
     fetchTimesheetsFromCloud().then((cloudTs) => {
@@ -830,7 +856,10 @@ export default function App() {
         currentUser={currentUser}
         onUserChange={(emp) => {
           setCurrentUser(emp);
+          const autoRole = resolveEmployeeRole(emp);
+          setCurrentRole(autoRole);
           saveToStorage(STORAGE_KEYS.CURRENT_USER_ID, emp.id);
+          saveToStorage(STORAGE_KEYS.CURRENT_ROLE, autoRole);
         }}
         employees={employees}
         company={company}

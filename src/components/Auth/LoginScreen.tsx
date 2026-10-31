@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Employee, UserRole, UserCredential, CompanyProfile } from '../../types/hris';
 import { LEEDO_MASTER_EMPLOYEES } from '../../data/leedoStaffDatabase';
+import { resolveEmployeeRole } from '../../utils/storage';
 import { 
   Lock, 
   User, 
@@ -100,29 +101,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   };
 
   const resolveRole = (emp: Employee): UserRole => {
-    const id = emp.id.trim();
-    if (id === '1001' || id === '1002') return 'hr_admin';
-    const des = emp.designation?.toLowerCase() || '';
-    const dept = emp.department?.toLowerCase() || '';
-    if (
-      des.includes('director') || 
-      des.includes('founder') || 
-      dept.includes('human resources') || 
-      dept.includes('admin & finance')
-    ) {
-      return 'hr_admin';
-    }
-    if (
-      des.includes('coordinator') || 
-      des.includes('manager') || 
-      des.includes('head') || 
-      des.includes('lead') || 
-      des.includes('in-charge') || 
-      des.includes('doctor')
-    ) {
-      return 'line_manager';
-    }
-    return 'employee';
+    return resolveEmployeeRole(emp);
   };
 
   const handleLoginSubmit = (e: React.FormEvent) => {
