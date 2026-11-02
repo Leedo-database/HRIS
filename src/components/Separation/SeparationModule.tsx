@@ -47,6 +47,7 @@ export const SeparationModule: React.FC<SeparationModuleProps> = ({
   const [customAdvanceDeduction, setCustomAdvanceDeduction] = useState<number>(0);
   
   const [activePrintRecord, setActivePrintRecord] = useState<SeparationRecord | null>(null);
+  const [filterTab, setFilterTab] = useState<'all' | 'query' | 'settled'>('query');
 
   // Auto react to initialStaffId passed from Employee Directory or Profile
   React.useEffect(() => {
@@ -278,56 +279,155 @@ export const SeparationModule: React.FC<SeparationModuleProps> = ({
         </div>
       )}
 
-      {/* Separations Registry */}
-      <div className="space-y-4">
-        {separations.map((rec) => {
-          const emp = employees.find((e) => e.id === rec.employeeId);
-          return (
-            <div
-              key={rec.id}
-              className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4"
-            >
-              {/* Header Info */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
-                    {rec.employeeName.charAt(0)}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-slate-900 text-sm">{rec.employeeName}</h3>
-                      <span className="font-mono text-xs text-slate-400">({rec.employeeId})</span>
-                      <span className="text-[10px] font-semibold bg-rose-50 text-rose-700 px-2.5 py-0.5 rounded-full border border-rose-200">
-                        {rec.separationType}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500">
-                      {rec.designation} • {rec.department} | Last Working Day: <strong>{rec.lastWorkingDate}</strong>
-                    </p>
-                  </div>
-                </div>
+      {/* Tab Switcher: Final Settlement Query vs Settled vs All */}
+      {(() => {
+        const queryRecords = separations.filter(
+          (s) => s.clearanceStatus === 'Clearance In Progress' || s.clearanceStatus === 'Clearance Approved'
+        );
+        const settledRecords = separations.filter((s) => s.clearanceStatus === 'Settlement Finalized');
+        const displayedRecords = filterTab === 'query' 
+          ? queryRecords 
+          : filterTab === 'settled' 
+          ? settledRecords 
+          : separations;
 
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setActivePrintRecord(rec)}
-                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer"
-                  >
-                    <Printer className="w-3.5 h-3.5" />
-                    <span>Print Settlement Sheet</span>
-                  </button>
-                  {emp && (
-                    <button
-                      onClick={() => onGenerateLetter(emp, 'experience')}
-                      className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer"
+        return (
+          <>
+            <div className="flex border-b border-slate-200 bg-white p-1.5 rounded-2xl border border-slate-200 gap-2 text-xs font-semibold overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => setFilterTab('query')}
+                className={`py-2 px-3.5 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
+                  filterTab === 'query'
+                    ? 'bg-rose-600 text-white shadow-xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span>Final Settlement Query / Clearance in Progress (ফাইনাল সেটেলমেন্ট কোয়েরি)</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  filterTab === 'query' ? 'bg-white/20 text-white' : 'bg-rose-100 text-rose-800'
+                }`}>
+                  {queryRecords.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setFilterTab('settled')}
+                className={`py-2 px-3.5 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
+                  filterTab === 'settled'
+                    ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Settled & Disbursed (নিষ্পত্তিকৃত তালিকা)</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  filterTab === 'settled' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
+                }`}>
+                  {settledRecords.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setFilterTab('all')}
+                className={`py-2 px-3.5 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
+                  filterTab === 'all'
+                    ? 'bg-indigo-600 text-white shadow-xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <span>All Records (সকল রেকর্ড)</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  filterTab === 'all' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
+                }`}>
+                  {separations.length}
+                </span>
+              </button>
+            </div>
+
+            {/* Separations Registry */}
+            <div className="space-y-4">
+              {displayedRecords.length === 0 ? (
+                <div className="p-8 text-center bg-white rounded-2xl border border-slate-200 text-slate-500">
+                  <UserMinus className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                  <p className="font-semibold text-sm">No records found in this category</p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {filterTab === 'query' 
+                      ? 'No separated staff currently pending final settlement query audit.' 
+                      : 'No settled dockets found.'}
+                  </p>
+                </div>
+              ) : (
+                displayedRecords.map((rec) => {
+                  const emp = employees.find((e) => e.id === rec.employeeId);
+                  return (
+                    <div
+                      key={rec.id}
+                      className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4"
                     >
-                      <FileCheck2 className="w-3.5 h-3.5" />
-                      <span>Issue Experience Letter</span>
-                    </button>
-                  )}
-                </div>
-              </div>
+                      {/* Header Info */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
+                            {rec.employeeName.charAt(0)}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-bold text-slate-900 text-sm">{rec.employeeName}</h3>
+                              <span className="font-mono text-xs text-slate-400">({rec.employeeId})</span>
+                              <span className="text-[10px] font-semibold bg-rose-50 text-rose-700 px-2.5 py-0.5 rounded-full border border-rose-200">
+                                {rec.separationType}
+                              </span>
+                              {rec.clearanceStatus === 'Settlement Finalized' ? (
+                                <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full">
+                                  ✓ Settled & Disbursed
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full">
+                                  Query / In Progress
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-500">
+                              {rec.designation} • {rec.department} | Last Working Day: <strong>{rec.lastWorkingDate}</strong>
+                            </p>
+                          </div>
+                        </div>
 
-              {/* Clearance Checkpoints & Settlement Figures Grid */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          {rec.clearanceStatus !== 'Settlement Finalized' && currentRole === 'hr_admin' && (
+                            <button
+                              onClick={() => onUpdateSeparation({ ...rec, clearanceStatus: 'Settlement Finalized' })}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer shadow-2xs"
+                              title="Mark this docket as settled and paid"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Disburse & Settle</span>
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setActivePrintRecord(rec)}
+                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                            <span>Print Settlement Sheet</span>
+                          </button>
+                          {emp && (
+                            <button
+                              onClick={() => onGenerateLetter(emp, 'experience')}
+                              className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                            >
+                              <FileCheck2 className="w-3.5 h-3.5" />
+                              <span>Issue Experience Letter</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Clearance Checkpoints & Settlement Figures Grid */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 text-xs">
                 {/* 4-Point Clearance Checklist */}
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2.5">
@@ -407,24 +507,39 @@ export const SeparationModule: React.FC<SeparationModuleProps> = ({
               </div>
             </div>
           );
-        })}
-      </div>
+        })
+      )}
+    </div>
+  </>
+);
+})()}
 
       {/* Printable Final Settlement Document Modal */}
       {activePrintRecord && (
-        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden printable-document-container">
-            <div className="no-print bg-slate-900 p-4 text-white flex items-center justify-between">
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setActivePrintRecord(null);
+          }}
+          className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+        >
+          <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden printable-document-container flex flex-col max-h-[92vh]">
+            <div className="no-print bg-slate-900 p-4 text-white flex items-center justify-between shrink-0">
               <span className="font-bold text-sm">Final Settlement & Exit Clearance Docket</span>
               <div className="flex items-center gap-2">
                 <button
+                  type="button"
                   onClick={() => window.print()}
                   className="allow-print px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
                 >
                   <Printer className="w-4 h-4" /> Print / Save PDF
                 </button>
-                <button onClick={() => setActivePrintRecord(null)} className="text-slate-400 hover:text-white">
-                  <X className="w-5 h-5" />
+                <button
+                  type="button"
+                  onClick={() => setActivePrintRecord(null)}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer border border-slate-700"
+                >
+                  <X className="w-4 h-4" />
+                  <span>Close (বন্ধ করুন)</span>
                 </button>
               </div>
             </div>
@@ -536,6 +651,31 @@ export const SeparationModule: React.FC<SeparationModuleProps> = ({
                   <div className="border-t border-slate-400 pt-1 font-semibold">{activePrintRecord.employeeName}</div>
                   <p className="text-slate-500">Employee Acknowledgment</p>
                 </div>
+              </div>
+            </div>
+
+            {/* Sticky Bottom Actions Bar */}
+            <div className="no-print bg-slate-100 p-3.5 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0">
+              <span className="text-xs text-slate-500 font-medium">
+                {activePrintRecord.employeeName} ({activePrintRecord.employeeId}) • Final Settlement Statement
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActivePrintRecord(null)}
+                  className="px-4 py-2 bg-white hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-300 transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                >
+                  <X className="w-4 h-4" />
+                  <span>Close Statement (বন্ধ করুন)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Print Statement</span>
+                </button>
               </div>
             </div>
           </div>

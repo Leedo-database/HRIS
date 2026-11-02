@@ -10,9 +10,13 @@ import {
   DollarSign, 
   ShieldCheck, 
   UserCheck, 
-  Sparkles,
   Calculator,
-  AlertTriangle
+  AlertTriangle,
+  GraduationCap,
+  Building,
+  Heart,
+  PhoneCall,
+  FileCheck2
 } from 'lucide-react';
 import { calculateDailyHours, calculateLeaveQuotas, formatCurrency, isEmployeeActive } from '../../utils/calculations';
 
@@ -46,7 +50,18 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
   jobLocations = [...LEEDO_JOB_LOCATIONS],
 }) => {
   const [formData, setFormData] = useState<Partial<Employee>>({});
-  const [activeTab, setActiveTab] = useState<'basic' | 'duty_schedule' | 'salary' | 'locations' | 'compliance'>('basic');
+  const [activeTab, setActiveTab] = useState<'personal' | 'job' | 'duty_schedule' | 'salary' | 'locations_compliance'>('personal');
+
+  const computeNetSalary = (data: Partial<Employee>) => {
+    const gross = Number(data.grossSalary) || 0;
+    const mobile = Number(data.mobileAllowance) || 0;
+    const travel = Number(data.travelAllowance) || 0;
+    const basic = Number(data.basicSalary) || Math.round(gross * 0.5);
+    const pf = Math.round(basic * ((data.pfDeductionPercentage ?? 8) / 100));
+    const tax = Number(data.taxDeduction) || 0;
+    const adv = Number(data.advanceBalance) || 0;
+    return Math.max(0, gross + mobile + travel - pf - tax - adv);
+  };
 
   useEffect(() => {
     if (employeeToEdit) {
@@ -58,8 +73,24 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       const hours = employeeToEdit.dailyDutyHours || calculateDailyHours(startT, endT);
       const quotas = calculateLeaveQuotas(duty.length, hours, employeeToEdit.joiningDate);
 
+      const net = employeeToEdit.netSalary ?? computeNetSalary(employeeToEdit);
+
       setFormData({
         ...employeeToEdit,
+        highestEducation: employeeToEdit.highestEducation ?? 'Bachelor of Social Science (BSS)',
+        professionalEducation: employeeToEdit.professionalEducation ?? '',
+        certificateNumber: employeeToEdit.certificateNumber ?? '',
+        fatherOrSpouseName: employeeToEdit.fatherOrSpouseName ?? '',
+        motherName: employeeToEdit.motherName ?? '',
+        religion: employeeToEdit.religion ?? 'Islam',
+        natureOfEmployment: employeeToEdit.natureOfEmployment ?? 'Regular',
+        categoryOfStaff: employeeToEdit.categoryOfStaff ?? 'Officer',
+        donorName: employeeToEdit.donorName ?? 'LEEDO Core Fund',
+        jobLocationCategory: employeeToEdit.jobLocationCategory ?? 'Urban Outreach & Shelters',
+        confirmationDate: employeeToEdit.confirmationDate ?? '',
+        separationDate: employeeToEdit.separationDate ?? '',
+        separationReason: employeeToEdit.separationReason ?? '',
+        remarks: employeeToEdit.remarks ?? '',
         dutyDays: duty,
         shiftStartTime: startT,
         shiftEndTime: endT,
@@ -70,9 +101,25 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
         mobileAllowance: employeeToEdit.mobileAllowance ?? 1000,
         travelAllowance: employeeToEdit.travelAllowance ?? 2000,
         advanceBalance: employeeToEdit.advanceBalance ?? 0,
+        netSalary: net,
         jobLocations: employeeToEdit.jobLocations && employeeToEdit.jobLocations.length > 0
           ? employeeToEdit.jobLocations
           : [employeeToEdit.workStation || 'Head Office'],
+        bankDetails: {
+          bankName: employeeToEdit.bankDetails?.bankName || 'Brac Bank PLC',
+          accountName: employeeToEdit.bankDetails?.accountName || employeeToEdit.fullName,
+          accountNumber: employeeToEdit.bankDetails?.accountNumber || '',
+          branchName: employeeToEdit.bankDetails?.branchName || 'Dhaka Branch',
+          routingNumber: employeeToEdit.bankDetails?.routingNumber || '060264182',
+          mobileBankingType: employeeToEdit.bankDetails?.mobileBankingType || 'bKash',
+          mobileBankingNumber: employeeToEdit.bankDetails?.mobileBankingNumber || employeeToEdit.phone,
+        },
+        emergencyContact: {
+          name: employeeToEdit.emergencyContact?.name || '',
+          relation: employeeToEdit.emergencyContact?.relation || 'Spouse',
+          phone: employeeToEdit.emergencyContact?.phone || '',
+          address: employeeToEdit.emergencyContact?.address || employeeToEdit.presentAddress,
+        },
       });
     } else {
       // Determine next sequential ID (e.g. 1100, 1101)
@@ -88,25 +135,52 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       const joinDate = new Date().toISOString().split('T')[0];
       const quotas = calculateLeaveQuotas(defaultDuty.length, defaultHours, joinDate);
 
+      const gross = 50000;
+      const basic = 25000;
+      const house = 12500;
+      const med = 5000;
+      const conv = 5000;
+      const mob = 1000;
+      const trav = 2000;
+      const tax = 500;
+      const pf = Math.round(basic * 0.08);
+      const net = gross + mob + trav - pf - tax;
+
       setFormData({
         id: nextId,
         fullName: '',
         banglaName: '',
         email: '',
+        personalEmail: '',
         phone: '+880 1',
         gender: 'Female',
         dob: '1995-01-01',
+        religion: 'Islam',
         bloodGroup: 'B+',
         nidOrPassport: '',
+        fatherOrSpouseName: '',
+        motherName: '',
+        highestEducation: 'Bachelor of Social Science (BSS)',
+        professionalEducation: 'Child Protection in Emergencies (CPiE)',
+        certificateNumber: '',
         presentAddress: 'Dhaka, Bangladesh',
         permanentAddress: '',
         designation: 'Project Officer',
         department: 'Program & Operation',
         gradeLevel: 'Grade 4 (Officer)',
         joiningDate: joinDate,
+        confirmationDate: '',
+        separationDate: '',
+        separationReason: '',
+        remarks: 'Active staff member onboarded under official LEEDO HR policy.',
         employmentType: 'Permanent',
         status: 'Active',
+        natureOfEmployment: 'Regular',
+        categoryOfStaff: 'Officer',
+        donorName: 'LEEDO Core Fund',
+        jobLocationCategory: 'Urban Outreach & Shelters',
         workStation: 'Head Office',
+        jobLocation: 'Head Office',
         assignedProject: 'Child Protection & Street Hub',
         jobLocations: ['Head Office'],
         
@@ -122,17 +196,18 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
         sickLeaveQuota: quotas.sickLeave,
 
         // Salary Breakdown
-        grossSalary: 50000,
-        mobileAllowance: 1000,
-        travelAllowance: 2000,
+        grossSalary: gross,
+        mobileAllowance: mob,
+        travelAllowance: trav,
         advanceBalance: 0,
-        basicSalary: 25000,
-        houseRent: 12500,
-        medicalAllowance: 5000,
-        conveyanceAllowance: 5000,
+        basicSalary: basic,
+        houseRent: house,
+        medicalAllowance: med,
+        conveyanceAllowance: conv,
         specialProjectAllowance: 2500,
         pfDeductionPercentage: 8,
-        taxDeduction: 1000,
+        taxDeduction: tax,
+        netSalary: net,
 
         // Supervisor
         reportingManagerId: '1002',
@@ -178,7 +253,6 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       updated = [...current, dayKey];
     }
 
-    // recalculate quotas live
     const quotas = calculateLeaveQuotas(
       updated.length,
       formData.dailyDutyHours || 8,
@@ -244,6 +318,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       ...prev,
       jobLocations: updated,
       workStation: updated[0] || 'Head Office',
+      jobLocation: updated[0] || 'Head Office',
     }));
   };
 
@@ -263,6 +338,15 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     const med = Math.round(gross * 0.1);
     const conv = Math.round(gross * 0.1);
     const tax = gross > 40000 ? Math.round((gross - 40000) * 0.05) : 0;
+    const net = computeNetSalary({
+      ...formData,
+      grossSalary: gross,
+      basicSalary: basic,
+      houseRent: house,
+      medicalAllowance: med,
+      conveyanceAllowance: conv,
+      taxDeduction: tax,
+    });
 
     setFormData((prev) => ({
       ...prev,
@@ -272,7 +356,20 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       medicalAllowance: med,
       conveyanceAllowance: conv,
       taxDeduction: tax,
+      netSalary: net,
     }));
+  };
+
+  const updateAllowance = (field: 'mobileAllowance' | 'travelAllowance' | 'advanceBalance' | 'taxDeduction', val: number) => {
+    const updated = {
+      ...formData,
+      [field]: val,
+    };
+    const net = computeNetSalary(updated);
+    setFormData({
+      ...updated,
+      netSalary: net,
+    });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -281,7 +378,12 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       alert('Please fill out Employee Name and Official Email.');
       return;
     }
-    onSave(formData as Employee);
+    const finalNet = computeNetSalary(formData);
+    onSave({
+      ...formData,
+      netSalary: finalNet,
+      jobLocation: formData.jobLocation || formData.workStation || 'Head Office',
+    } as Employee);
     onClose();
   };
 
@@ -299,10 +401,10 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
             </div>
             <div>
               <h2 className="font-bold text-base sm:text-lg">
-                {employeeToEdit ? `Edit Staff Profile: ${employeeToEdit.fullName}` : 'Onboard New Staff Member'}
+                {employeeToEdit ? `Edit Staff Profile: ${employeeToEdit.fullName}` : 'Onboard New Staff Member (কর্মী নিবন্ধন)'}
               </h2>
               <p className="text-xs text-slate-400">
-                Staff ID: <span className="font-mono text-emerald-400 font-bold">{formData.id}</span> • Supervisor, Duty Days, Hours, Salary & Locations
+                Staff ID: <span className="font-mono text-emerald-400 font-bold">{formData.id}</span> • 24 Master HR Fields Supported
               </p>
             </div>
           </div>
@@ -318,65 +420,65 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
         <div className="flex border-b border-slate-200 bg-slate-50 px-4 sm:px-6 gap-2 text-xs font-semibold overflow-x-auto">
           <button
             type="button"
-            onClick={() => setActiveTab('basic')}
-            className={`py-3 px-3 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'basic'
+            onClick={() => setActiveTab('personal')}
+            className={`py-3 px-3 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'personal'
                 ? 'border-indigo-600 text-indigo-600 font-bold'
                 : 'border-transparent text-slate-600 hover:text-slate-900'
             }`}
           >
-            <UserCheck className="w-4 h-4" /> Personal & Supervisor
+            <UserCheck className="w-4 h-4" /> Personal & Education
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('job')}
+            className={`py-3 px-3 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'job'
+                ? 'border-indigo-600 text-indigo-600 font-bold'
+                : 'border-transparent text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Building className="w-4 h-4" /> Job & Organization
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('duty_schedule')}
-            className={`py-3 px-3 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
+            className={`py-3 px-3 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === 'duty_schedule'
                 ? 'border-indigo-600 text-indigo-600 font-bold'
                 : 'border-transparent text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Clock className="w-4 h-4" /> Duty Schedule & Leave Quotas
+            <Clock className="w-4 h-4" /> Duty & Leave Quotas
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('salary')}
-            className={`py-3 px-3 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
+            className={`py-3 px-3 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === 'salary'
                 ? 'border-indigo-600 text-indigo-600 font-bold'
                 : 'border-transparent text-slate-600 hover:text-slate-900'
             }`}
           >
-            <DollarSign className="w-4 h-4" /> Gross Salary & Allowances
+            <DollarSign className="w-4 h-4" /> Salary & Bank
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab('locations')}
-            className={`py-3 px-3 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'locations'
+            onClick={() => setActiveTab('locations_compliance')}
+            className={`py-3 px-3 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'locations_compliance'
                 ? 'border-indigo-600 text-indigo-600 font-bold'
                 : 'border-transparent text-slate-600 hover:text-slate-900'
             }`}
           >
-            <MapPin className="w-4 h-4" /> Job Locations ({formData.jobLocations?.length || 1})
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('compliance')}
-            className={`py-3 px-3 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'compliance'
-                ? 'border-indigo-600 text-indigo-600 font-bold'
-                : 'border-transparent text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <ShieldCheck className="w-4 h-4" /> Compliance & Bank
+            <ShieldCheck className="w-4 h-4" /> Locations & Emergency
           </button>
         </div>
 
         {/* Modal Form */}
         <form onSubmit={handleSubmit} className="p-5 sm:p-6 overflow-y-auto flex-1 space-y-5 text-xs">
-          {/* TAB 1: BASIC & SUPERVISOR */}
-          {activeTab === 'basic' && (
+          {/* TAB 1: PERSONAL & EDUCATION (NID, DOB, Address, Highest Ed, Professional Ed, Certificate, Father/Husband, Mother, Gender, Religion) */}
+          {activeTab === 'personal' && (
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
@@ -395,14 +497,14 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                     type="text"
                     value={formData.fullName || ''}
                     onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                    className="w-full p-2.5 border border-slate-200 rounded-xl"
+                    className="w-full p-2.5 border border-slate-200 rounded-xl font-medium"
                     placeholder="e.g. Mohammad Jasim Uddin"
                     required
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">Bangla Name (বাংলা নাম)</label>
                   <input
@@ -424,17 +526,37 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                     required
                   />
                 </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Personal Email Address</label>
+                  <input
+                    type="email"
+                    value={formData.personalEmail || ''}
+                    onChange={(e) => setFormData({ ...formData, personalEmail: e.target.value })}
+                    className="w-full p-2.5 border border-slate-200 rounded-xl"
+                    placeholder="e.g. jasim.personal@gmail.com"
+                  />
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Phone Number</label>
+              {/* Specific Field Requirements: NID, DOB, Gender, Religion, Blood Group */}
+              <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="font-bold text-slate-700 block mb-1">NID / Passport Number</label>
                   <input
                     type="text"
-                    value={formData.phone || ''}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    value={formData.nidOrPassport || ''}
+                    onChange={(e) => setFormData({ ...formData, nidOrPassport: e.target.value })}
                     className="w-full p-2.5 border border-slate-200 rounded-xl font-mono"
-                    placeholder="+880 1712-XXXXXX"
+                    placeholder="e.g. 19902692518000123"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">DOB (Date of Birth)</label>
+                  <input
+                    type="date"
+                    value={formData.dob || '1995-01-01'}
+                    onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
+                    className="w-full p-2.5 border border-slate-200 rounded-xl"
                   />
                 </div>
                 <div>
@@ -450,20 +572,136 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   </select>
                 </div>
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Blood Group</label>
+                  <label className="font-bold text-slate-700 block mb-1">Religion</label>
                   <select
-                    value={formData.bloodGroup || 'B+'}
-                    onChange={(e) => setFormData({ ...formData, bloodGroup: e.target.value })}
+                    value={formData.religion || 'Islam'}
+                    onChange={(e) => setFormData({ ...formData, religion: e.target.value })}
                     className="w-full p-2.5 border border-slate-200 rounded-xl bg-white"
                   >
-                    {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((b) => (
-                      <option key={b} value={b}>{b}</option>
-                    ))}
+                    <option value="Islam">Islam</option>
+                    <option value="Hinduism">Hinduism</option>
+                    <option value="Christianity">Christianity</option>
+                    <option value="Buddhism">Buddhism</option>
+                    <option value="Other">Other</option>
                   </select>
                 </div>
               </div>
 
-              {/* SUPERVISOR / REPORTING MANAGER (Explicit user requirement) */}
+              {/* Parents / Spouse Name & Blood Group */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Father / Husband Name</label>
+                  <input
+                    type="text"
+                    value={formData.fatherOrSpouseName || ''}
+                    onChange={(e) => setFormData({ ...formData, fatherOrSpouseName: e.target.value })}
+                    className="w-full p-2.5 border border-slate-200 rounded-xl"
+                    placeholder="e.g. Md. Rafiqul Islam / Husband"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Mother Name</label>
+                  <input
+                    type="text"
+                    value={formData.motherName || ''}
+                    onChange={(e) => setFormData({ ...formData, motherName: e.target.value })}
+                    className="w-full p-2.5 border border-slate-200 rounded-xl"
+                    placeholder="e.g. Rokeya Begum"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Blood Group & Phone</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      value={formData.bloodGroup || 'B+'}
+                      onChange={(e) => setFormData({ ...formData, bloodGroup: e.target.value })}
+                      className="w-full p-2.5 border border-slate-200 rounded-xl bg-white"
+                    >
+                      {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((b) => (
+                        <option key={b} value={b}>{b}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      value={formData.phone || ''}
+                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      className="w-full p-2.5 border border-slate-200 rounded-xl font-mono text-[11px]"
+                      placeholder="+880 17..."
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Education & Certification Specific Fields */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                <div className="flex items-center gap-2">
+                  <GraduationCap className="w-4 h-4 text-indigo-600" />
+                  <span className="font-bold text-slate-900 text-xs">Educational Credentials & Professional Certifications</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Highest Education</label>
+                    <input
+                      type="text"
+                      value={formData.highestEducation || ''}
+                      onChange={(e) => setFormData({ ...formData, highestEducation: e.target.value })}
+                      className="w-full p-2.5 border border-slate-200 rounded-xl bg-white"
+                      placeholder="e.g. MSS in Social Welfare, DU"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Professional Education</label>
+                    <input
+                      type="text"
+                      value={formData.professionalEducation || ''}
+                      onChange={(e) => setFormData({ ...formData, professionalEducation: e.target.value })}
+                      className="w-full p-2.5 border border-slate-200 rounded-xl bg-white"
+                      placeholder="e.g. PGDHRM, Child Protection, IASC"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Certificate Number</label>
+                    <input
+                      type="text"
+                      value={formData.certificateNumber || ''}
+                      onChange={(e) => setFormData({ ...formData, certificateNumber: e.target.value })}
+                      className="w-full p-2.5 border border-slate-200 rounded-xl bg-white font-mono"
+                      placeholder="e.g. CERT-2024-8841"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Addresses (Present & Permanent) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Present Address (বর্তমান ঠিকানা)</label>
+                  <textarea
+                    rows={2}
+                    value={formData.presentAddress || ''}
+                    onChange={(e) => setFormData({ ...formData, presentAddress: e.target.value })}
+                    className="w-full p-2.5 border border-slate-200 rounded-xl"
+                    placeholder="House/Road, Area, District"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Permanent Address (স্থায়ী ঠিকানা)</label>
+                  <textarea
+                    rows={2}
+                    value={formData.permanentAddress || ''}
+                    onChange={(e) => setFormData({ ...formData, permanentAddress: e.target.value })}
+                    className="w-full p-2.5 border border-slate-200 rounded-xl"
+                    placeholder="Village, Post Office, Upazila, District"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: JOB & ORGANIZATION (Grade, Nature of Employment, Category of Staff, Donor, Job Location Category, Work Station, DOJ, DOC, DOS, Reason for DOS, Remarks) */}
+          {activeTab === 'job' && (
+            <div className="space-y-4">
+              {/* Supervisor Callout */}
               <div className="p-4 bg-indigo-50/70 border border-indigo-100 rounded-2xl space-y-2">
                 <div className="flex items-center gap-2">
                   <UserCheck className="w-4 h-4 text-indigo-700" />
@@ -471,24 +709,12 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                     Designated Supervisor / Reporting Manager (কে কার সুপারভাইজার)
                   </label>
                 </div>
-                <p className="text-[11px] text-indigo-800">
-                  Select the line supervisor responsible for approving this employee's leave applications, timesheets, and field duty requests.
-                </p>
                 <select
                   value={formData.reportingManagerId || ''}
                   onChange={(e) => handleSupervisorChange(e.target.value)}
                   className="w-full p-2.5 border border-indigo-200 rounded-xl bg-white text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="">-- No Direct Line Supervisor (Reports to Founder/ED) --</option>
-                  {/* If previously assigned supervisor has resigned/separated, display with tag */}
-                  {formData.reportingManagerId &&
-                    !employees
-                      .filter((e) => e.id !== formData.id && isEmployeeActive(e))
-                      .some((e) => e.id === formData.reportingManagerId) && (
-                      <option value={formData.reportingManagerId}>
-                        ⚠️ [Inactive/Separated: {formData.reportingManagerName || formData.reportingManagerId}] — Reassign to an active supervisor
-                      </option>
-                    )}
                   {employees
                     .filter((e) => e.id !== formData.id && isEmployeeActive(e))
                     .map((emp) => (
@@ -499,7 +725,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 </select>
               </div>
 
-              {/* Designation, Department & Grade */}
+              {/* Designation, Department, Grade */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">Designation</label>
@@ -527,7 +753,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   </select>
                 </div>
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Grade Level</label>
+                  <label className="font-bold text-slate-700 block mb-1">Grade (বেতন স্কেল গ্রেড)</label>
                   <select
                     value={formData.gradeLevel || 'Grade 4 (Officer)'}
                     onChange={(e) => setFormData({ ...formData, gradeLevel: e.target.value })}
@@ -543,10 +769,101 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 </div>
               </div>
 
-              {/* Status and Joining Date */}
+              {/* Nature of Employment, Category of Staff, Donor Name */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Joining Date</label>
+                  <label className="font-bold text-slate-700 block mb-1">Nature of Employment</label>
+                  <select
+                    value={formData.natureOfEmployment || 'Regular'}
+                    onChange={(e) => setFormData({ ...formData, natureOfEmployment: e.target.value })}
+                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white"
+                  >
+                    <option value="Regular">Regular</option>
+                    <option value="Project-Based">Project-Based</option>
+                    <option value="Contractual">Contractual</option>
+                    <option value="Probationary">Probationary</option>
+                    <option value="Casual / Daily">Casual / Daily</option>
+                    <option value="Intern / Volunteer">Intern / Volunteer</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Category of Staff</label>
+                  <select
+                    value={formData.categoryOfStaff || 'Officer'}
+                    onChange={(e) => setFormData({ ...formData, categoryOfStaff: e.target.value })}
+                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white"
+                  >
+                    <option value="Management">Management</option>
+                    <option value="Officer">Officer</option>
+                    <option value="Field Staff">Field Staff</option>
+                    <option value="Teacher / Caregiver">Teacher / Caregiver</option>
+                    <option value="Support Staff">Support Staff</option>
+                    <option value="Consultant">Consultant</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Donor Name / Project Fund</label>
+                  <input
+                    type="text"
+                    value={formData.donorName || 'LEEDO Core Fund'}
+                    onChange={(e) => setFormData({ ...formData, donorName: e.target.value })}
+                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white font-medium"
+                    placeholder="e.g. LEEDO Core Fund / UNICEF / FCDO"
+                  />
+                </div>
+              </div>
+
+              {/* Job Location Category & Primary Work Station & Project */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Job Location Category</label>
+                  <select
+                    value={formData.jobLocationCategory || 'Urban Outreach & Shelters'}
+                    onChange={(e) => setFormData({ ...formData, jobLocationCategory: e.target.value })}
+                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white"
+                  >
+                    <option value="Urban Outreach & Shelters">Urban Outreach & Shelters</option>
+                    <option value="Central Administration">Central Administration</option>
+                    <option value="Transit Shelter & Mobile School">Transit Shelter & Mobile School</option>
+                    <option value="Long Term Peace Home">Long Term Peace Home</option>
+                    <option value="Field Operations Hub">Field Operations Hub</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Job Location / Station</label>
+                  <select
+                    value={formData.workStation || 'Head Office'}
+                    onChange={(e) => {
+                      const st = e.target.value;
+                      setFormData({
+                        ...formData,
+                        workStation: st,
+                        jobLocation: st,
+                      });
+                    }}
+                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white font-semibold"
+                  >
+                    {jobLocations.map((loc) => (
+                      <option key={loc} value={loc}>{loc}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Assigned Project</label>
+                  <input
+                    type="text"
+                    value={formData.assignedProject || ''}
+                    onChange={(e) => setFormData({ ...formData, assignedProject: e.target.value })}
+                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white"
+                    placeholder="e.g. Child Protection & Street Hub"
+                  />
+                </div>
+              </div>
+
+              {/* Dates: DOJ, DOC, Status, DOS & Reason for DOS */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">DOJ (Joining Date)</label>
                   <input
                     type="date"
                     value={formData.joiningDate || ''}
@@ -564,7 +881,16 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                         sickLeaveQuota: quotas.sickLeave,
                       });
                     }}
-                    className="w-full p-2.5 border border-slate-200 rounded-xl"
+                    className="w-full p-2 border border-slate-200 rounded-xl font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">DOC (Confirmation Date)</label>
+                  <input
+                    type="date"
+                    value={formData.confirmationDate || ''}
+                    onChange={(e) => setFormData({ ...formData, confirmationDate: e.target.value })}
+                    className="w-full p-2 border border-slate-200 rounded-xl"
                   />
                 </div>
                 <div>
@@ -572,74 +898,56 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   <select
                     value={formData.status || 'Active'}
                     onChange={(e) => setFormData({ ...formData, status: e.target.value as EmploymentStatus })}
-                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white font-semibold"
+                    className="w-full p-2 border border-slate-200 rounded-xl bg-white font-bold"
                   >
                     <option value="Active">Active</option>
                     <option value="Probation">Probation</option>
                     <option value="Contractual">Contractual</option>
                     <option value="On Leave">On Leave</option>
-                    <option value="Terminated">Terminated / Separated</option>
+                    <option value="Terminated">Terminated</option>
+                    <option value="Separated">Separated</option>
                   </select>
                 </div>
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Employment Type</label>
-                  <select
-                    value={formData.employmentType || 'Permanent'}
-                    onChange={(e) => setFormData({ ...formData, employmentType: e.target.value as any })}
-                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white"
-                  >
-                    <option value="Permanent">Permanent</option>
-                    <option value="Contractual">Contractual</option>
-                    <option value="Consultant">Consultant</option>
-                    <option value="Volunteer">Volunteer</option>
-                    <option value="Intern">Intern</option>
-                  </select>
+                  <label className="font-bold text-slate-700 block mb-1">DOS (Separation Date)</label>
+                  <input
+                    type="date"
+                    value={formData.separationDate || ''}
+                    onChange={(e) => setFormData({ ...formData, separationDate: e.target.value })}
+                    className="w-full p-2 border border-slate-200 rounded-xl"
+                  />
                 </div>
               </div>
 
-              {/* Separation reason if status is Terminated */}
-              {formData.status === 'Terminated' && (
-                <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl space-y-3">
-                  <div className="flex items-center gap-2 text-rose-800 font-bold">
-                    <AlertTriangle className="w-4 h-4 text-rose-600" />
-                    <span>Employee Separation Details</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="font-bold text-slate-700 block mb-1">Separation Reason</label>
-                      <select
-                        value={formData.separationReason || 'Resignation'}
-                        onChange={(e) => setFormData({ ...formData, separationReason: e.target.value })}
-                        className="w-full p-2 border border-slate-200 rounded-xl bg-white"
-                      >
-                        <option value="Resignation">Voluntary Resignation</option>
-                        <option value="Termination">Official Termination</option>
-                        <option value="Contract Expiry">Contract Expiry</option>
-                        <option value="Retirement">Retirement</option>
-                        <option value="Mutual Separation">Mutual Separation</option>
-                        <option value="Disciplinary Dismissal">Disciplinary Action / Dismissal</option>
-                        <option value="Project Funding Closure">Project Funding Closure</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="font-bold text-slate-700 block mb-1">Separation Date</label>
-                      <input
-                        type="date"
-                        value={formData.separationDate || new Date().toISOString().split('T')[0]}
-                        onChange={(e) => setFormData({ ...formData, separationDate: e.target.value })}
-                        className="w-full p-2 border border-slate-200 rounded-xl bg-white"
-                      />
-                    </div>
-                  </div>
+              {/* Separation Reason & Remarks */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Reason's for DOS (Separation Reason)</label>
+                  <input
+                    type="text"
+                    value={formData.separationReason || ''}
+                    onChange={(e) => setFormData({ ...formData, separationReason: e.target.value })}
+                    className="w-full p-2.5 border border-slate-200 rounded-xl"
+                    placeholder="e.g. Voluntary Resignation / Project Closure / Higher Studies"
+                  />
                 </div>
-              )}
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Remarks (মন্তব্য / নোট)</label>
+                  <input
+                    type="text"
+                    value={formData.remarks || ''}
+                    onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
+                    className="w-full p-2.5 border border-slate-200 rounded-xl"
+                    placeholder="Special HR notes, performance or clearance remarks"
+                  />
+                </div>
+              </div>
             </div>
           )}
 
-          {/* TAB 2: DUTY SCHEDULE & LEAVE QUOTAS (Explicit User Requirement) */}
+          {/* TAB 3: DUTY SCHEDULE & LEAVE QUOTAS */}
           {activeTab === 'duty_schedule' && (
             <div className="space-y-5">
-              {/* Preset Schedule Buttons */}
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
                 <span className="font-bold text-slate-800 text-xs block">Quick Schedule Presets:</span>
                 <div className="flex flex-wrap gap-2">
@@ -667,7 +975,6 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 </div>
               </div>
 
-              {/* Multiple Day Duty Selector */}
               <div>
                 <label className="font-bold text-slate-800 block mb-1.5">
                   Select Duty Days (কে কোন কোন দিন ডিউটি করবে - একাধিক দিন সিলেক্ট করুন):
@@ -701,7 +1008,6 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 </p>
               </div>
 
-              {/* Shift Timing: 10:00 - 18:00 Auto calculates 8 hrs */}
               <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
@@ -765,7 +1071,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 </div>
               </div>
 
-              {/* Automatic Leave Quota Ratio Calculator (Casual: 16 days, Sick: 14 days baseline) */}
+              {/* Leave Quota Proportional Calculator */}
               <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-2xl space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-emerald-950 text-xs flex items-center gap-1.5">
@@ -776,10 +1082,6 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                     Total: {totalLeave} Days
                   </span>
                 </div>
-
-                <p className="text-[11px] text-emerald-900 leading-relaxed">
-                  <strong>Policy:</strong> Full-time staff (6 days, 8 hrs = 48 hrs/week) receive <strong>16 Days Casual Leave</strong> & <strong>14 Days Sick Leave</strong> (30 days total). Staff with custom schedules (e.g. 3 days, 3 hrs) receive proportionate leave. Joining mid-year reduces the quota pro-rata by remaining months. HR can customize either field below:
-                </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                   <div className="bg-white p-3 rounded-xl border border-emerald-200">
@@ -797,7 +1099,6 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                       />
                       <span className="text-xs text-slate-500 font-bold">Days</span>
                     </div>
-                    <span className="text-[10px] text-slate-400 block mt-1">Standard baseline: 16 days</span>
                   </div>
 
                   <div className="bg-white p-3 rounded-xl border border-emerald-200">
@@ -815,23 +1116,33 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                       />
                       <span className="text-xs text-slate-500 font-bold">Days</span>
                     </div>
-                    <span className="text-[10px] text-slate-400 block mt-1">Standard baseline: 14 days</span>
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* TAB 3: SALARY (Gross, Mobile Allowance, Travel Allowance, Deductions) */}
+          {/* TAB 4: SALARY & BANKING (Net Salary, Gross, Breakdown, Allowances, Advances, Bank Details) */}
           {activeTab === 'salary' && (
             <div className="space-y-4">
-              <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-2xl">
-                <span className="font-bold text-amber-950 text-xs block mb-1">
-                  Salary Structure (বেতন কাঠামো - Gross, Mobile, Travel & Advance)
-                </span>
-                <p className="text-[11px] text-amber-900 leading-relaxed">
-                  Monthly payroll calculates: <strong>Gross Salary + Mobile Allowance + Travel Allowance</strong>. Unapproved absents deduct salary per working day rate (<code>Gross ÷ 26</code>). Any outstanding advance/loan is automatically deducted.
-                </p>
+              {/* Highlight Net Take-Home Salary */}
+              <div className="p-4 bg-gradient-to-r from-emerald-600 to-teal-700 rounded-2xl text-white shadow-md flex items-center justify-between">
+                <div>
+                  <span className="text-emerald-100 text-[11px] font-semibold uppercase tracking-wider block">
+                    Net Take-Home Salary (মোট প্রদেয় বেতন - Net Salary)
+                  </span>
+                  <p className="text-2xl sm:text-3xl font-extrabold mt-0.5 tracking-tight">
+                    {formatCurrency(formData.netSalary || computeNetSalary(formData))}
+                  </p>
+                  <span className="text-[11px] text-emerald-100/90 block mt-0.5">
+                    Gross (৳{formData.grossSalary || 0}) + Mobile (৳{formData.mobileAllowance || 0}) + Travel (৳{formData.travelAllowance || 0}) − PF/Tax/Advance
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="bg-white/20 text-white text-xs px-3 py-1 rounded-full font-bold">
+                    Auto Synchronized
+                  </span>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -855,9 +1166,8 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   <input
                     type="number"
                     value={formData.mobileAllowance ?? 1000}
-                    onChange={(e) => setFormData({ ...formData, mobileAllowance: Number(e.target.value) || 0 })}
+                    onChange={(e) => updateAllowance('mobileAllowance', Number(e.target.value) || 0)}
                     className="w-full p-2.5 border border-slate-200 rounded-xl font-bold text-sm text-indigo-700 bg-white"
-                    placeholder="e.g. 1000"
                   />
                   <span className="text-[10px] text-slate-500 mt-0.5 block">Official communication stipend</span>
                 </div>
@@ -867,11 +1177,30 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   <input
                     type="number"
                     value={formData.travelAllowance ?? 2000}
-                    onChange={(e) => setFormData({ ...formData, travelAllowance: Number(e.target.value) || 0 })}
+                    onChange={(e) => updateAllowance('travelAllowance', Number(e.target.value) || 0)}
                     className="w-full p-2.5 border border-slate-200 rounded-xl font-bold text-sm text-indigo-700 bg-white"
-                    placeholder="e.g. 2000"
                   />
                   <span className="text-[10px] text-slate-500 mt-0.5 block">Conveyance / Field transit</span>
+                </div>
+              </div>
+
+              {/* Deductions & Allowances breakdown */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                <div>
+                  <span className="text-[10px] text-slate-500 block font-semibold">Basic (50%)</span>
+                  <p className="font-bold text-slate-800">{formatCurrency(formData.basicSalary || Math.round((formData.grossSalary || 0) * 0.5))}</p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 block font-semibold">House Rent (25%)</span>
+                  <p className="font-bold text-slate-800">{formatCurrency(formData.houseRent || Math.round((formData.grossSalary || 0) * 0.25))}</p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 block font-semibold">Medical (10%)</span>
+                  <p className="font-bold text-slate-800">{formatCurrency(formData.medicalAllowance || Math.round((formData.grossSalary || 0) * 0.1))}</p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 block font-semibold">Conveyance (10%)</span>
+                  <p className="font-bold text-slate-800">{formatCurrency(formData.conveyanceAllowance || Math.round((formData.grossSalary || 0) * 0.1))}</p>
                 </div>
               </div>
 
@@ -881,7 +1210,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   <input
                     type="number"
                     value={formData.advanceBalance ?? 0}
-                    onChange={(e) => setFormData({ ...formData, advanceBalance: Number(e.target.value) || 0 })}
+                    onChange={(e) => updateAllowance('advanceBalance', Number(e.target.value) || 0)}
                     className="w-full p-2.5 border border-slate-200 rounded-xl font-bold text-rose-700 bg-white"
                     placeholder="e.g. 5000"
                   />
@@ -889,77 +1218,24 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                     Outstanding advance to deduct on next payroll
                   </span>
                 </div>
-
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col justify-center">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase">Estimated Total Monthly Gross</span>
-                  <p className="text-xl font-bold text-emerald-700 mt-0.5">
-                    {formatCurrency((formData.grossSalary || 0) + (formData.mobileAllowance || 0) + (formData.travelAllowance || 0))}
-                  </p>
-                  <span className="text-[10px] text-slate-500">Gross + Mobile + Travel</span>
+                <div>
+                  <label className="font-bold text-slate-800 block mb-1">Tax Deduction (৳)</label>
+                  <input
+                    type="number"
+                    value={formData.taxDeduction ?? 0}
+                    onChange={(e) => updateAllowance('taxDeduction', Number(e.target.value) || 0)}
+                    className="w-full p-2.5 border border-slate-200 rounded-xl font-bold text-slate-800 bg-white"
+                    placeholder="e.g. 500"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-0.5 block">
+                    Monthly income tax deduction at source
+                  </span>
                 </div>
               </div>
-            </div>
-          )}
 
-          {/* TAB 4: 13 LEEDO JOB LOCATIONS (Multiple Select) */}
-          {activeTab === 'locations' && (
-            <div className="space-y-4">
-              <div className="p-4 bg-indigo-50/70 border border-indigo-100 rounded-2xl">
-                <span className="font-bold text-indigo-950 text-xs block mb-1">
-                  Multi-Location Assignment (এক জন কর্মী ২-৩ টি কর্মস্থলে কাজ করতে পারবে)
-                </span>
-                <p className="text-[11px] text-indigo-900 leading-relaxed">
-                  Select all LEEDO centers and shelters where this staff member operates or conducts field duties.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {jobLocations.map((loc) => {
-                  const isSelected = (formData.jobLocations || []).includes(loc);
-                  return (
-                    <button
-                      type="button"
-                      key={loc}
-                      onClick={() => toggleJobLocation(loc)}
-                      className={`p-3 rounded-2xl border text-left flex items-center justify-between cursor-pointer transition-all ${
-                        isSelected
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                          : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <MapPin className={`w-4 h-4 ${isSelected ? 'text-white' : 'text-indigo-600'}`} />
-                        <div>
-                          <p className="font-bold text-xs">{loc}</p>
-                          <span className={`text-[10px] ${isSelected ? 'text-indigo-100' : 'text-slate-400'}`}>
-                            Official LEEDO Center
-                          </span>
-                        </div>
-                      </div>
-                      <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
-                        isSelected ? 'bg-white text-indigo-600' : 'bg-slate-100 text-slate-400'
-                      }`}>
-                        {isSelected ? '✓' : '+'}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                <p className="text-xs text-slate-700">
-                  Assigned Centers ({formData.jobLocations?.length || 0}):{' '}
-                  <strong>{formData.jobLocations?.join(', ') || 'Head Office'}</strong>
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 5: COMPLIANCE & BANK */}
-          {activeTab === 'compliance' && (
-            <div className="space-y-4">
+              {/* Bank Account Details */}
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
-                <span className="font-bold text-slate-900 text-xs block">Bank & Mobile Banking Details</span>
+                <span className="font-bold text-slate-900 text-xs block">Bank & Mobile Banking Disbursement Information</span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="font-bold text-slate-700 block mb-1">Bank Name</label>
@@ -975,7 +1251,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="font-bold text-slate-700 block mb-1">Account Number</label>
+                    <label className="font-bold text-slate-700 block mb-1">Bank Account Number</label>
                     <input
                       type="text"
                       value={formData.bankDetails?.accountNumber || ''}
@@ -983,8 +1259,34 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                         ...formData,
                         bankDetails: { ...formData.bankDetails!, accountNumber: e.target.value }
                       })}
-                      className="w-full p-2 border border-slate-200 rounded-xl bg-white font-mono"
+                      className="w-full p-2 border border-slate-200 rounded-xl bg-white font-mono font-bold"
                       placeholder="e.g. 150120XXXXXXXXX"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Branch Name</label>
+                    <input
+                      type="text"
+                      value={formData.bankDetails?.branchName || ''}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        bankDetails: { ...formData.bankDetails!, branchName: e.target.value }
+                      })}
+                      className="w-full p-2 border border-slate-200 rounded-xl bg-white"
+                      placeholder="e.g. Mirpur Branch, Dhaka"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Routing Number</label>
+                    <input
+                      type="text"
+                      value={formData.bankDetails?.routingNumber || ''}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        bankDetails: { ...formData.bankDetails!, routingNumber: e.target.value }
+                      })}
+                      className="w-full p-2 border border-slate-200 rounded-xl bg-white font-mono"
+                      placeholder="e.g. 060264182"
                     />
                   </div>
                   <div>
@@ -1016,6 +1318,111 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                       placeholder="+880 1XXXXXXXXX"
                     />
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: LOCATIONS & EMERGENCY CONTACT & COMPLIANCE */}
+          {activeTab === 'locations_compliance' && (
+            <div className="space-y-5">
+              {/* Emergency Contact */}
+              <div className="p-4 bg-rose-50/60 border border-rose-200 rounded-2xl space-y-3">
+                <div className="flex items-center gap-2">
+                  <PhoneCall className="w-4 h-4 text-rose-600" />
+                  <span className="font-bold text-rose-950 text-xs">Emergency Contact Details (জরুরী যোগাযোগ)</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Emergency Contact Person</label>
+                    <input
+                      type="text"
+                      value={formData.emergencyContact?.name || ''}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        emergencyContact: { ...formData.emergencyContact!, name: e.target.value }
+                      })}
+                      className="w-full p-2 border border-slate-200 rounded-xl bg-white"
+                      placeholder="e.g. Spouse / Brother / Father Name"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Relationship</label>
+                    <input
+                      type="text"
+                      value={formData.emergencyContact?.relation || ''}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        emergencyContact: { ...formData.emergencyContact!, relation: e.target.value }
+                      })}
+                      className="w-full p-2 border border-slate-200 rounded-xl bg-white"
+                      placeholder="e.g. Spouse / Father / Sister"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Emergency Contact Number</label>
+                    <input
+                      type="text"
+                      value={formData.emergencyContact?.phone || ''}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        emergencyContact: { ...formData.emergencyContact!, phone: e.target.value }
+                      })}
+                      className="w-full p-2 border border-slate-200 rounded-xl bg-white font-mono font-bold text-rose-700"
+                      placeholder="+880 1XXXXXXXXX"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Emergency Contact Address</label>
+                    <input
+                      type="text"
+                      value={formData.emergencyContact?.address || ''}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        emergencyContact: { ...formData.emergencyContact!, address: e.target.value }
+                      })}
+                      className="w-full p-2 border border-slate-200 rounded-xl bg-white"
+                      placeholder="City, District"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Multi Job Locations */}
+              <div className="p-4 bg-indigo-50/70 border border-indigo-100 rounded-2xl space-y-2">
+                <span className="font-bold text-indigo-950 text-xs block">
+                  Assigned Job Locations & Centers (এক জন কর্মী একাধিক কর্মস্থলে কাজ করতে পারবে)
+                </span>
+                <p className="text-[11px] text-indigo-900 leading-relaxed">
+                  Select all LEEDO centers, transit shelters and mobile schools this staff member operates at:
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
+                  {jobLocations.map((loc) => {
+                    const isSelected = (formData.jobLocations || []).includes(loc);
+                    return (
+                      <button
+                        type="button"
+                        key={loc}
+                        onClick={() => toggleJobLocation(loc)}
+                        className={`p-2.5 rounded-xl border text-left flex items-center justify-between cursor-pointer transition-all ${
+                          isSelected
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                            : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <MapPin className={`w-3.5 h-3.5 ${isSelected ? 'text-white' : 'text-indigo-600'}`} />
+                          <span className="font-bold text-xs">{loc}</span>
+                        </div>
+                        <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                          isSelected ? 'bg-white text-indigo-600' : 'bg-slate-100 text-slate-400'
+                        }`}>
+                          {isSelected ? '✓' : '+'}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

@@ -30,7 +30,8 @@ import {
   isEmployeeActive,
   getReligionDistribution,
   getAgeDistribution,
-  getNewJoinees
+  getNewJoinees,
+  formatHours
 } from '../../utils/calculations';
 import { NavTab } from '../Sidebar';
 
@@ -406,7 +407,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                       {rec.status} • In: {rec.clockInTime}
                     </span>
                     <p className="text-[11px] font-mono text-slate-500 mt-0.5">
-                      Out: {rec.clockOutTime || 'Active'} • {rec.hoursWorked || 8} hrs
+                      Out: {rec.clockOutTime || 'Active'} • {formatHours(rec.hoursWorked || 8)}
                     </p>
                   </div>
                 </div>

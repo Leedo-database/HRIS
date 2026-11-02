@@ -11,7 +11,7 @@ import {
   LeaveRequest
 } from '../../types/hris';
 import { OFFICIAL_BANGLADESH_HOLIDAYS_2026 } from '../../data/bangladeshHolidays';
-import { getHolidayOnDate, isEmployeeActive } from '../../utils/calculations';
+import { getHolidayOnDate, isEmployeeActive, calculateDailyHours, formatHours } from '../../utils/calculations';
 import { 
   CalendarCheck2, 
   Plus, 
@@ -132,6 +132,8 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
   // Modal 2: HR Master All-Staff Monthly Timesheet Summary Print Modal
   const [isMasterSummaryPrintModalOpen, setIsMasterSummaryPrintModalOpen] = useState(false);
   const [masterFilterStation, setMasterFilterStation] = useState<string>('All');
+  const [includeInactiveStaff, setIncludeInactiveStaff] = useState<boolean>(false);
+  const [masterSearchQuery, setMasterSearchQuery] = useState<string>('');
 
   // Modal 3: Late & Absenteeism Exception Timesheet Print Modal
   const [isExceptionPrintModalOpen, setIsExceptionPrintModalOpen] = useState(false);
@@ -315,7 +317,7 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
         govtHolidayDays++;
         status = `Govt Holiday (সরকারি ছুটি)`;
         hoursLogged = dailyHours; // Fully credited paid standard duty hours
-        totalWorkedHours += dailyHours;
+        totalWorkedHours = Math.round((totalWorkedHours + dailyHours) * 10) / 10;
         notes = `Official Gazette Public Holiday: ${hol.titleBangla || hol.title} (Paid Day Off)`;
       } else {
         // 2. Check Approved Leave
@@ -337,18 +339,33 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
           if (attMatch) {
             clockInTime = attMatch.clockInTime;
             clockOutTime = attMatch.clockOutTime;
-            hoursLogged = attMatch.hoursWorked || dailyHours;
+
+            // Midnight Auto-Checkout Rule:
+            // "jodi kew check out dite vule jay thole se rat 12 tar por auto check out hoye jabe and ta check out time 07 ta dora hobe"
+            if (clockInTime && (!clockOutTime || clockOutTime.trim() === '')) {
+              if (dateStr < todayStr) {
+                clockOutTime = '19:00:00';
+              }
+            }
+
+            if (clockInTime && clockOutTime) {
+              hoursLogged = Math.round(calculateDailyHours(clockInTime, clockOutTime) * 10) / 10;
+            } else if (attMatch.hoursWorked !== undefined && attMatch.hoursWorked !== null) {
+              hoursLogged = Math.round(Number(attMatch.hoursWorked) * 10) / 10;
+            } else {
+              hoursLogged = dailyHours;
+            }
 
             if (attMatch.status === 'Late') {
               isLate = true;
               lateDays++;
               presentDays++;
-              totalWorkedHours += hoursLogged;
+              totalWorkedHours = Math.round((totalWorkedHours + hoursLogged) * 10) / 10;
               // Extract late minutes or calculate
               const [inH, inM] = (attMatch.clockInTime || '10:35').split(':').map(Number);
               lateMinutes = Math.max(1, ((inH || 10) * 60 + (inM || 0)) - (10 * 60));
               status = 'Late Arrival (বিলম্ব)';
-              notes = `Late In: ${clockInTime} (+${lateMinutes}m late) • Shift: ${emp.shiftStartTime || '10:00'}-${emp.shiftEndTime || '18:00'}`;
+              notes = `Late In: ${clockInTime} (+${lateMinutes}m late) • Shift: ${emp.shiftStartTime || '10:00'}-${emp.shiftEndTime || '18:00'}${clockOutTime === '19:00:00' && !attMatch.clockOutTime ? ' (রাত ১২টার পর অটো-চেকআউট সন্ধ্যা ০৭:০০)' : ''}`;
             } else if (attMatch.status === 'Absent') {
               isAbsent = true;
               status = 'Absent (অনুপস্থিত)';
@@ -358,9 +375,9 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
             } else {
               // Present on time
               status = 'Present / Duty Performed';
-              totalWorkedHours += hoursLogged;
+              totalWorkedHours = Math.round((totalWorkedHours + hoursLogged) * 10) / 10;
               presentDays++;
-              notes = `${emp.assignedProject || 'Street Children Shelter & Community Hub'} (${clockInTime || emp.shiftStartTime || '10:00'} - ${clockOutTime || emp.shiftEndTime || '18:00'})`;
+              notes = `${emp.assignedProject || 'Street Children Shelter & Community Hub'} (${clockInTime || emp.shiftStartTime || '10:00'} - ${clockOutTime || emp.shiftEndTime || '18:00'})${clockOutTime === '19:00:00' && !attMatch.clockOutTime ? ' (রাত ১২টার পর অটো-চেকআউট সন্ধ্যা ০৭:০০)' : ''}`;
             }
           } else {
             // Scheduled duty day without attendance record
@@ -382,7 +399,7 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
               status = 'Present / Duty Performed';
               hoursLogged = dailyHours;
               presentDays++;
-              totalWorkedHours += dailyHours;
+              totalWorkedHours = Math.round((totalWorkedHours + dailyHours) * 10) / 10;
               notes = `${emp.assignedProject || 'Street Children Shelter & Community Hub'} (${emp.shiftStartTime || '10:00'} - ${emp.shiftEndTime || '18:00'})`;
             }
           }
@@ -417,7 +434,7 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
       absentDays,
       lateDays,
       offDays: Math.max(0, daysInMonth - scheduledDutyDays - govtHolidayDays),
-      totalWorkedHours,
+      totalWorkedHours: Math.round(totalWorkedHours * 10) / 10,
     };
   };
 
@@ -442,12 +459,12 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
       .map((e) => e.id)
   );
 
-  // Accessible staff based on role (Employee sees only self; Supervisor sees team; HR sees all)
+  // Accessible staff based on role (Employee sees only self; Supervisor sees team; HR sees all) - strictly active employees
   const accessibleEmployees = currentRole === 'employee'
     ? [currentUser]
     : currentRole === 'line_manager'
-    ? employees.filter((e) => e.id === currentUser.id || subordinateIds.has(e.id))
-    : employees;
+    ? employees.filter((e) => (e.id === currentUser.id || subordinateIds.has(e.id)) && isEmployeeActive(e))
+    : employees.filter(isEmployeeActive);
 
   // All Late and Absent incidents for accessible staff for the selected month
   const allExceptionsInMonth = accessibleEmployees.flatMap((emp) => {
@@ -570,8 +587,8 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
     );
 
     const baseStaff = currentRole === 'line_manager'
-      ? employees.filter(e => subordinateIds.has(e.id) || e.id === currentUser.id)
-      : employees;
+      ? employees.filter(e => (subordinateIds.has(e.id) || e.id === currentUser.id) && (includeInactiveStaff ? true : isEmployeeActive(e)))
+      : employees.filter(e => (includeInactiveStaff ? true : isEmployeeActive(e)));
 
     const targetEmployees = masterFilterStation === 'All' 
       ? baseStaff 
@@ -635,10 +652,10 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
         <div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
             <CalendarCheck2 className="w-5 h-5 text-indigo-600" />
-            <span>Staff Monthly Timesheets & Donor Compliance (মাসিক টাইমশীট)</span>
+            <span>Timesheet (মাসিক টাইমশীট)</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Log activity hours, generate authentic monthly timesheets (not weekly), print master staff summary & handle corrections
+            মাসিক অফিসিয়াল টাইমশীট, বায়োমেট্রিক ডিউটি কার্যঘণ্টা ও অল-স্টাফ মাস্টার সামারি রেজিস্টার
           </p>
         </div>
 
@@ -672,14 +689,6 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
           >
             <Download className="w-3.5 h-3.5" />
             <span>Export Master CSV</span>
-          </button>
-
-          <button
-            onClick={() => setIsCreating(true)}
-            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Submit Time Log</span>
           </button>
         </div>
       </div>
@@ -772,69 +781,6 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
             )}
           </div>
 
-          {/* Timesheet Display & Highlight Controls Toolbar */}
-          <div className="no-print bg-slate-50 p-3.5 rounded-2xl border border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2 text-slate-700 font-bold">
-              <SlidersHorizontal className="w-4 h-4 text-indigo-600" />
-              <span>Timesheet View & Highlight Options (টাইমশীটে প্রদর্শন নিয়ন্ত্রণ):</span>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-4">
-              <label className="flex items-center gap-1.5 cursor-pointer font-medium text-slate-700 select-none">
-                <input
-                  type="checkbox"
-                  checked={showLateData}
-                  onChange={(e) => setShowLateData(e.target.checked)}
-                  className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 border-slate-300"
-                />
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                  <span>Show Late Arrivals (দেরি উপস্থিতি)</span>
-                </span>
-              </label>
-
-              <label className="flex items-center gap-1.5 cursor-pointer font-medium text-slate-700 select-none">
-                <input
-                  type="checkbox"
-                  checked={showAbsentData}
-                  onChange={(e) => setShowAbsentData(e.target.checked)}
-                  className="w-4 h-4 rounded text-rose-600 focus:ring-rose-500 border-slate-300"
-                />
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-                  <span>Show Absent Days (অনুপস্থিতি দিন)</span>
-                </span>
-              </label>
-
-              <label className="flex items-center gap-1.5 cursor-pointer font-semibold select-none bg-rose-50/80 px-2.5 py-1 rounded-xl border border-rose-200">
-                <input
-                  type="checkbox"
-                  checked={autoMarkMissingBiometricAsAbsent}
-                  onChange={(e) => setAutoMarkMissingBiometricAsAbsent(e.target.checked)}
-                  className="w-4 h-4 rounded text-rose-600 focus:ring-rose-500 border-slate-300"
-                />
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse"></span>
-                  <span className="text-rose-900 text-xs">No Bio Punch = Absent (বায়োমেট্রিক ও ছুটি না থাকলে অনুপস্থিত)</span>
-                </span>
-              </label>
-
-              <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200">
-                <span className="text-slate-500 text-[11px]">Filter Days:</span>
-                <select
-                  value={timesheetDayFilter}
-                  onChange={(e) => setTimesheetDayFilter(e.target.value as any)}
-                  className="py-1 px-2.5 text-xs border border-slate-200 rounded-lg bg-white font-semibold text-slate-800"
-                >
-                  <option value="all">All Days (সব দিন)</option>
-                  <option value="late_only">Late Days Only (শুধু দেরি হওয়া দিন)</option>
-                  <option value="absent_only">Absent Days Only (শুধু অনুপস্থিত দিন)</option>
-                  <option value="exceptions_only">Exceptions Only (দেরি ও অনুপস্থিত উভয়ই)</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
           {/* Pending HR Corrections Review Banner (Visible to HR Admin) */}
           {currentRole === 'hr_admin' && allPendingCorrections.length > 0 && (
             <div className="no-print bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 space-y-3 shadow-xs">
@@ -892,247 +838,254 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
             </div>
           )}
 
-          {/* Creation Modal / Inline Drawer */}
-          {isCreating && (
-            <div className="no-print bg-white p-5 rounded-2xl border-2 border-indigo-200 shadow-md">
-              <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
-                <div>
-                  <h3 className="font-bold text-slate-900 text-sm">Log Project Activity Hours</h3>
-                  <p className="text-xs text-slate-500">Target Month: {monthLabel}</p>
-                </div>
-                <button
-                  onClick={() => setIsCreating(false)}
-                  className="text-slate-400 hover:text-slate-600 text-sm font-bold cursor-pointer"
-                >
-                  ✕
-                </button>
-              </div>
+          {/* MAIN VIEW: If employee, show personal monthly duty docket; If HR/Manager, show All-Staff Master Summary Register */}
+          {currentRole === 'employee' ? (() => {
+            const myStats = getEmployeeMonthlyDays(currentUser, selectedMonth);
+            return (
+              <div className="no-print space-y-4">
+                {/* Employee Month Overview Card */}
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                        <span>{currentUser.fullName}</span>
+                        <span className="font-mono text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md">
+                          ID: {currentUser.id}
+                        </span>
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        {currentUser.designation} • {currentUser.workStation} • Period: <strong>{monthLabel}</strong>
+                      </p>
+                    </div>
 
-              <form onSubmit={handleCreateTimesheet} className="space-y-4 text-xs">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-600 font-semibold mb-1">Donor Project Code</label>
-                    <select
-                      value={projectCode}
-                      onChange={(e) => {
-                        setProjectCode(e.target.value);
-                        if (e.target.value === 'LEEDO-CP-2026') setProjectName('Street Children Shelter & Rescue Mission');
-                        if (e.target.value === 'UNICEF-EDU-42') setProjectName('Child Rights Protection & Education');
-                        if (e.target.value === 'CORE-OPS-01') setProjectName('Core Administration & Safeguarding');
-                      }}
-                      className="w-full p-2 border border-slate-200 rounded-xl bg-white"
-                    >
-                      <option value="LEEDO-CP-2026">LEEDO-CP-2026 (Street Children Shelter & Rescue Mission)</option>
-                      <option value="UNICEF-EDU-42">UNICEF-EDU-42 (Child Rights Protection & Education)</option>
-                      <option value="CORE-OPS-01">CORE-OPS-01 (Core Administration & Finance)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-600 font-semibold mb-1">Project Name</label>
-                    <input
-                      type="text"
-                      value={projectName}
-                      readOnly
-                      className="w-full p-2 bg-slate-100 border border-slate-200 rounded-xl text-slate-700"
-                    />
-                  </div>
-
-                  <div className="sm:col-span-2">
-                    <label className="block text-slate-600 font-semibold mb-1">Specific Activity Description *</label>
-                    <textarea
-                      required
-                      rows={2}
-                      placeholder="Detail activities undertaken (e.g., child rescue outreach at Sadarghat terminal, M&E data entry, community counseling)..."
-                      value={activityDescription}
-                      onChange={(e) => setActivityDescription(e.target.value)}
-                      className="w-full p-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Daily Hours Input */}
-                <div>
-                  <label className="block text-slate-700 font-bold mb-2">Daily Hours Breakdown:</label>
-                  <div className="grid grid-cols-7 gap-2">
-                    {(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const).map((day) => (
-                      <div key={day} className="text-center p-2 rounded-xl bg-slate-50 border border-slate-200">
-                        <span className="uppercase text-[10px] font-bold text-slate-500">{day}</span>
-                        <input
-                          type="number"
-                          min="0"
-                          max="14"
-                          step="0.5"
-                          value={hours[day]}
-                          onChange={(e) =>
-                            setHours({ ...hours, [day]: parseFloat(e.target.value) || 0 })
-                          }
-                          className="w-full text-center font-bold text-slate-900 border border-slate-300 rounded-lg py-1 mt-1 bg-white"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                  <span className="text-xs font-bold text-slate-800">
-                    Weekly Total: <span className="text-indigo-600 text-sm font-extrabold">{totalHours} Hours</span>
-                  </span>
-                  <div className="flex gap-2">
                     <button
                       type="button"
-                      onClick={() => setIsCreating(false)}
-                      className="px-4 py-2 border border-slate-200 rounded-xl text-slate-600 cursor-pointer"
+                      onClick={() => setSelectedMonthlyPrintEmp(currentUser)}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer self-start sm:self-auto"
                     >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl flex items-center gap-1.5 shadow-xs cursor-pointer"
-                    >
-                      <Send className="w-3.5 h-3.5" />
-                      <span>Submit to Line Supervisor</span>
+                      <Printer className="w-4 h-4" />
+                      <span>Print Monthly Timesheet (মাসিক)</span>
                     </button>
                   </div>
-                </div>
-              </form>
-            </div>
-          )}
 
-          {/* Staff Timesheet Records & Monthly Print Actions */}
-          <div className="no-print space-y-4">
-            {visibleTimesheets.map((ts) => {
-              const emp = employees.find((e) => e.id === ts.employeeId) || currentUser;
-              const pendingCorrectionsForThis = (ts.correctionRequests || []).filter(
-                (r) => r.status === 'Pending HR Approval'
-              );
-
-              return (
-                <div
-                  key={ts.id}
-                  className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 hover:border-slate-300 transition-all"
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
-                        <FolderKanban className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                          <span>{ts.projectName}</span>
-                          <span className="text-[10px] font-mono bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md">
-                            {ts.projectCode}
-                          </span>
-                        </h3>
-                        <p className="text-xs text-slate-500">
-                          Logged by <strong>{ts.employeeName}</strong> (ID: {ts.employeeId}) • Period: <strong>{monthLabel}</strong>
-                        </p>
-                      </div>
+                  {/* Monthly Summary Statistics Grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-center text-xs">
+                    <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200">
+                      <span className="text-[10px] uppercase font-bold text-slate-500 block">Duty Scheduled</span>
+                      <span className="font-mono font-bold text-base text-slate-900">{myStats.scheduledDutyDays} d</span>
                     </div>
-
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full ${
-                          ts.status === 'Approved'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : ts.status === 'Rejected'
-                            ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                            : 'bg-amber-50 text-amber-700 border border-amber-200'
-                        }`}
-                      >
-                        {ts.status === 'Approved' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
-                        <span>{ts.status}</span>
-                      </span>
-
-                      {/* Monthly Timesheet Print Button (Monthly, Not Weekly!) */}
-                      <button
-                        type="button"
-                        onClick={() => setSelectedMonthlyPrintEmp(emp)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs border border-indigo-200 transition-colors cursor-pointer"
-                        title="Print full monthly timesheet docket for this staff member"
-                      >
-                        <Printer className="w-3.5 h-3.5" />
-                        <span>Print Monthly Timesheet (মাসিক)</span>
-                      </button>
-
-                      {/* Request Edit to HR (Available to staff who submitted) */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveCorrectionTimesheet(ts);
-                          setIsCorrectionModalOpen(true);
-                        }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold text-xs border border-slate-200 transition-colors cursor-pointer"
-                        title="Request an adjustment or correction to HR"
-                      >
-                        <Edit className="w-3.5 h-3.5" />
-                        <span>Request Edit</span>
-                      </button>
+                    <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200">
+                      <span className="text-[10px] uppercase font-bold text-emerald-700 block">Present Days</span>
+                      <span className="font-mono font-bold text-base text-emerald-800">{myStats.presentDays} d</span>
+                    </div>
+                    <div className="p-2.5 bg-teal-50 rounded-xl border border-teal-200">
+                      <span className="text-[10px] uppercase font-bold text-teal-700 block">Govt Holidays</span>
+                      <span className="font-mono font-bold text-base text-teal-800">{myStats.govtHolidayDays} d</span>
+                    </div>
+                    <div className="p-2.5 bg-indigo-50 rounded-xl border border-indigo-200">
+                      <span className="text-[10px] uppercase font-bold text-indigo-700 block">Total Worked</span>
+                      <span className="font-mono font-black text-base text-indigo-800">{formatHours(myStats.totalWorkedHours)}</span>
+                    </div>
+                    <div className="p-2.5 bg-amber-50 rounded-xl border border-amber-200">
+                      <span className="text-[10px] uppercase font-bold text-amber-700 block">Approved Leave</span>
+                      <span className="font-mono font-bold text-base text-amber-800">{myStats.leaveDays} d</span>
+                    </div>
+                    <div className="p-2.5 bg-rose-50 rounded-xl border border-rose-200">
+                      <span className="text-[10px] uppercase font-bold text-rose-700 block">Absent Days</span>
+                      <span className="font-mono font-bold text-base text-rose-800">{myStats.absentDays} d</span>
                     </div>
                   </div>
 
-                  {/* Activity Description */}
-                  <p className="text-xs text-slate-700 leading-relaxed bg-slate-50/70 p-3 rounded-xl border border-slate-100">
-                    <span className="font-semibold text-slate-900 block mb-0.5">Activity Record:</span>
-                    {ts.activityDescription}
-                  </p>
-
-                  {/* Hours Grid */}
-                  <div className="grid grid-cols-7 gap-2 text-center text-xs">
-                    {(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const).map((day) => (
-                      <div key={day} className="p-2 rounded-xl bg-slate-50 border border-slate-100">
-                        <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">{day}</span>
-                        <span className={`font-mono font-bold text-sm ${ts.hours[day] > 0 ? 'text-indigo-600' : 'text-slate-400'}`}>
-                          {ts.hours[day]}h
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Pending Corrections Alert on this Card */}
-                  {pendingCorrectionsForThis.length > 0 && (
-                    <div className="p-2.5 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 flex items-center justify-between">
-                      <span className="font-semibold flex items-center gap-1">
-                        <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
-                        Revision requested by staff ({DAY_LABELS[pendingCorrectionsForThis[0].dayKey]}: {pendingCorrectionsForThis[0].requestedHours}h) - Pending HR approval
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Supervisor Comment & Approval Actions */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 text-xs border-t border-slate-100">
-                    <div className="text-slate-500 text-[11px] italic">
-                      {ts.supervisorComment && <span>Note: {ts.supervisorComment}</span>}
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <span className="font-bold text-slate-800">
-                        Total: <span className="text-indigo-600 font-extrabold">{ts.totalHours} hrs</span>
-                      </span>
-
-                      {currentRole !== 'employee' && ts.status === 'Submitted' && (
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleReject(ts)}
-                            className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold cursor-pointer"
-                          >
-                            Reject
-                          </button>
-                          <button
-                            onClick={() => handleApprove(ts)}
-                            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex items-center gap-1 shadow-xs cursor-pointer"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>Approve Timesheet</span>
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                  {/* Daily Log Table */}
+                  <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                    <table className="w-full text-xs text-left">
+                      <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                        <tr>
+                          <th className="p-2.5 text-center w-12">Day</th>
+                          <th className="p-2.5">Date</th>
+                          <th className="p-2.5">In Time</th>
+                          <th className="p-2.5">Out Time</th>
+                          <th className="p-2.5 text-center">Hours</th>
+                          <th className="p-2.5">Duty Status</th>
+                          <th className="p-2.5">Duty Station & Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {myStats.days.map((day) => (
+                          <tr key={day.dateStr} className={`hover:bg-slate-50/80 ${day.isHoliday ? 'bg-teal-50/30' : day.isAbsent ? 'bg-rose-50/30' : day.isLate ? 'bg-amber-50/30' : ''}`}>
+                            <td className="p-2.5 text-center font-mono font-semibold text-slate-500">{day.dayNumber}</td>
+                            <td className="p-2.5 font-medium text-slate-800 font-mono">
+                              {day.dateStr} <span className="text-slate-400 font-sans">({day.dayOfWeek})</span>
+                            </td>
+                            <td className="p-2.5 font-mono text-slate-700">{day.clockInTime || '--'}</td>
+                            <td className="p-2.5 font-mono text-slate-700">{day.clockOutTime || '--'}</td>
+                            <td className="p-2.5 text-center font-mono font-bold text-indigo-700">
+                              {day.hoursLogged > 0 ? formatHours(day.hoursLogged) : '--'}
+                            </td>
+                            <td className="p-2.5">
+                              <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold ${
+                                day.isHoliday ? 'bg-teal-100 text-teal-800' :
+                                day.isAbsent ? 'bg-rose-100 text-rose-800' :
+                                day.isLate ? 'bg-amber-100 text-amber-800' :
+                                day.status.includes('Leave') ? 'bg-purple-100 text-purple-800' :
+                                day.isScheduledDuty ? 'bg-emerald-100 text-emerald-800' :
+                                'bg-slate-100 text-slate-600'
+                              }`}>
+                                {day.status}
+                              </span>
+                            </td>
+                            <td className="p-2.5 text-slate-600 text-[11px]">{day.notes}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            );
+          })() : (() => {
+            // HR Admin & Line Manager view: Staff Master Timesheet Summary Register
+            const baseStaff = currentRole === 'line_manager'
+              ? employees.filter((e) => (subordinateIds.has(e.id) || e.id === currentUser.id) && (includeInactiveStaff ? true : isEmployeeActive(e)))
+              : employees.filter((e) => (includeInactiveStaff ? true : isEmployeeActive(e)));
+
+            const filteredStaff = baseStaff.filter((e) => {
+              const matchesStation = masterFilterStation === 'All' || e.workStation === masterFilterStation || e.jobLocations?.includes(masterFilterStation as any);
+              const matchesSearch = !masterSearchQuery.trim() ||
+                e.fullName.toLowerCase().includes(masterSearchQuery.toLowerCase()) ||
+                e.id.toLowerCase().includes(masterSearchQuery.toLowerCase()) ||
+                e.designation.toLowerCase().includes(masterSearchQuery.toLowerCase());
+              return matchesStation && matchesSearch;
+            });
+
+            return (
+              <div className="no-print space-y-4">
+                {/* Search & Filter Bar */}
+                <div className="bg-white p-3.5 rounded-2xl border border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
+                    <div className="relative flex-1 min-w-[180px]">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        placeholder="Search employee by name, ID or designation..."
+                        value={masterSearchQuery}
+                        onChange={(e) => setMasterSearchQuery(e.target.value)}
+                        className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-xl bg-slate-50/50 text-xs focus:bg-white focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-500 text-[11px] font-semibold">Station:</span>
+                      <select
+                        value={masterFilterStation}
+                        onChange={(e) => setMasterFilterStation(e.target.value)}
+                        className="py-1 px-2.5 text-xs border border-slate-200 rounded-lg bg-white font-semibold text-slate-800"
+                      >
+                        <option value="All">All Work Stations</option>
+                        {jobLocations.map((loc) => (
+                          <option key={loc} value={loc}>{loc}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <label className="flex items-center gap-1.5 text-slate-600 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={includeInactiveStaff}
+                        onChange={(e) => setIncludeInactiveStaff(e.target.checked)}
+                        className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300"
+                      />
+                      <span className="text-[11px]">Include Inactive/Separated Staff</span>
+                    </label>
+                  </div>
+
+                  <div className="text-[11px] text-slate-500 font-medium">
+                    Showing <strong>{filteredStaff.length}</strong> of <strong>{baseStaff.length}</strong> Staff
+                  </div>
+                </div>
+
+                {/* Master Staff Timesheet Summary Table */}
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs text-left">
+                      <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                        <tr>
+                          <th className="p-3 text-center w-14 border-r border-slate-200">ID</th>
+                          <th className="p-3 border-r border-slate-200">Staff Name & Designation</th>
+                          <th className="p-3 border-r border-slate-200">Station</th>
+                          <th className="p-3 text-center border-r border-slate-200">Scheduled</th>
+                          <th className="p-3 text-center text-emerald-800 border-r border-slate-200">Present</th>
+                          <th className="p-3 text-center text-teal-800 bg-teal-50/50 border-r border-slate-200">Govt Hol</th>
+                          <th className="p-3 text-center text-amber-800 border-r border-slate-200">Late Days</th>
+                          <th className="p-3 text-center text-indigo-800 font-black border-r border-slate-200">Total Worked</th>
+                          <th className="p-3 text-center text-purple-800 border-r border-slate-200">Leave</th>
+                          <th className="p-3 text-center text-rose-800 border-r border-slate-200">Absent</th>
+                          <th className="p-3 text-center border-r border-slate-200">Status</th>
+                          <th className="p-3 text-center">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {filteredStaff.map((emp) => {
+                          const stats = getStaffMonthlySummary(emp);
+                          return (
+                            <tr key={emp.id} className="hover:bg-slate-50/70 transition-colors">
+                              <td className="p-3 text-center font-mono font-bold text-slate-700 border-r border-slate-100">
+                                {emp.id}
+                              </td>
+                              <td className="p-3 border-r border-slate-100">
+                                <span className="font-bold text-slate-900 block">{emp.fullName}</span>
+                                <span className="text-[11px] text-slate-500">{emp.designation}</span>
+                              </td>
+                              <td className="p-3 border-r border-slate-100 text-slate-600 font-medium">
+                                {emp.workStation}
+                              </td>
+                              <td className="p-3 text-center font-mono font-bold text-slate-700 border-r border-slate-100">
+                                {stats.scheduledDutyDays} d
+                              </td>
+                              <td className="p-3 text-center font-mono font-bold text-emerald-700 border-r border-slate-100">
+                                {stats.presentDays} d
+                              </td>
+                              <td className="p-3 text-center font-mono font-bold text-teal-800 bg-teal-50/40 border-r border-slate-100">
+                                {stats.govtHolidayDays} d
+                              </td>
+                              <td className="p-3 text-center font-mono font-bold text-amber-700 border-r border-slate-100">
+                                {stats.lateDays > 0 ? `${stats.lateDays} d` : '--'}
+                              </td>
+                              <td className="p-3 text-center font-mono font-black text-indigo-700 border-r border-slate-100">
+                                {formatHours(stats.totalWorkedHours)}
+                              </td>
+                              <td className="p-3 text-center font-mono font-semibold text-purple-700 border-r border-slate-100">
+                                {stats.leaveDays > 0 ? `${stats.leaveDays} d` : '--'}
+                              </td>
+                              <td className="p-3 text-center font-mono font-semibold text-rose-700 border-r border-slate-100">
+                                {stats.absentDays > 0 ? `${stats.absentDays} d` : '0'}
+                              </td>
+                              <td className="p-3 text-center border-r border-slate-100">
+                                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                  100% Compliant
+                                </span>
+                              </td>
+                              <td className="p-3 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedMonthlyPrintEmp(emp)}
+                                  className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 cursor-pointer inline-flex items-center gap-1 shadow-2xs transition-colors"
+                                  title="Print full monthly timesheet for this staff member"
+                                >
+                                  <Printer className="w-3.5 h-3.5" />
+                                  <span>Print</span>
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </>
       ) : (
         /* ================= SUB-TAB 2: DEDICATED LATE & ABSENTEEISM EXCEPTION TIMESHEET ================= */
@@ -1548,7 +1501,7 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                   </div>
                   <div>
                     <span className="text-[10px] uppercase text-slate-400 font-bold block">Monthly Worked Hours</span>
-                    <p className="font-mono font-black text-indigo-900 text-sm mt-0.5">{stats.totalWorkedHours} Hours</p>
+                    <p className="font-mono font-black text-indigo-900 text-sm mt-0.5">{formatHours(stats.totalWorkedHours)}</p>
                     <span className="text-[10px] text-emerald-700 font-bold">Present: {stats.presentDays} of {stats.scheduledDutyDays} days</span>
                   </div>
                 </div>
@@ -1682,7 +1635,7 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                           Monthly Cumulative Total Approved Hours:
                         </td>
                         <td className="p-2 border-r border-slate-300 text-center font-mono text-indigo-700 font-extrabold text-xs">
-                          {stats.totalWorkedHours}h
+                          {formatHours(stats.totalWorkedHours)}
                         </td>
                         <td className="p-2 text-emerald-800 font-bold">
                           100% Reconciled ({stats.presentDays} duty days completed{stats.lateDays > 0 ? `, ${stats.lateDays} late` : ''})
@@ -1733,8 +1686,8 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
       {/* ================= MODAL 2: HR MASTER ALL-STAFF MONTHLY TIMESHEET SUMMARY PRINT ================= */}
       {isMasterSummaryPrintModalOpen && (() => {
         const baseStaff = currentRole === 'line_manager'
-          ? employees.filter(e => subordinateIds.has(e.id) || e.id === currentUser.id)
-          : employees;
+          ? employees.filter(e => (subordinateIds.has(e.id) || e.id === currentUser.id) && (includeInactiveStaff ? true : isEmployeeActive(e)))
+          : employees.filter(e => (includeInactiveStaff ? true : isEmployeeActive(e)));
         const filteredList = masterFilterStation === 'All'
           ? baseStaff
           : baseStaff.filter(e => e.workStation === masterFilterStation || e.jobLocations?.includes(masterFilterStation as any));
@@ -1750,11 +1703,24 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                     <h3 className="font-bold text-sm">
                       Master Monthly Timesheet Summary (সকল কর্মীর মাসিক টাইমশীট মাস্টার সামারি)
                     </h3>
-                    <p className="text-[11px] text-slate-400">Period: {monthLabel} • {filteredList.length} Staff Members</p>
+                    <p className="text-[11px] text-slate-400">
+                      Period: {monthLabel} • <span className="text-emerald-400 font-bold">{filteredList.length} Active Staff</span>
+                      {!includeInactiveStaff && ' (Excluding Inactive/Separated Staff)'}
+                    </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-xs text-slate-300 font-medium bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={includeInactiveStaff}
+                      onChange={(e) => setIncludeInactiveStaff(e.target.checked)}
+                      className="rounded-sm text-indigo-500"
+                    />
+                    <span>Show Exited/Inactive Staff</span>
+                  </label>
+
                   <select
                     value={masterFilterStation}
                     onChange={(e) => setMasterFilterStation(e.target.value)}
@@ -1873,7 +1839,7 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                               {stats.govtHolidayDays} d <span className="text-[9px] text-teal-600 font-normal">(paid)</span>
                             </td>
                             <td className="p-2 border-r border-slate-200 text-center font-mono font-bold text-indigo-700">
-                              {stats.totalWorkedHours} hrs
+                              {formatHours(stats.totalWorkedHours)}
                             </td>
                             <td className="p-2 border-r border-slate-200 text-center font-mono font-semibold text-amber-700">
                               {stats.leaveDays > 0 ? `${stats.leaveDays} d` : '--'}

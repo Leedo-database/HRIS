@@ -18,7 +18,8 @@ import {
   UserMinus,
   UserCheck,
   Clock,
-  Sparkles
+  Sparkles,
+  X
 } from 'lucide-react';
 import { formatCurrency, isEmployeeActive } from '../../utils/calculations';
 
@@ -34,6 +35,15 @@ interface EmployeeDirectoryProps {
   onEditEmployee: (emp: Employee) => void;
   onGenerateLetter: (emp: Employee, letterType: string) => void;
   onInitiateSeparation?: (emp: Employee) => void;
+  onRecordSeparation?: (emp: Employee, details: {
+    separationType: string;
+    separationDate: string;
+    noticeDate: string;
+    reason: string;
+    handoverTo: string;
+    status?: string;
+  }) => void;
+  onReactivateEmployee?: (empId: string, rejoiningDate?: string, notes?: string) => void;
 }
 
 export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
@@ -48,6 +58,8 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
   onEditEmployee,
   onGenerateLetter,
   onInitiateSeparation,
+  onRecordSeparation,
+  onReactivateEmployee,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDept, setSelectedDept] = useState('All');
@@ -55,6 +67,18 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
   const [selectedLocation, setSelectedLocation] = useState('All');
   const [selectedSupervisor, setSelectedSupervisor] = useState('All');
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
+
+  // Separation Action Modal State
+  const [isSeparationModalOpen, setIsSeparationModalOpen] = useState(false);
+  const [employeeToSeparate, setEmployeeToSeparate] = useState<Employee | null>(null);
+  const [separationDetails, setSeparationDetails] = useState({
+    separationType: 'Resignation',
+    separationDate: new Date().toISOString().split('T')[0],
+    noticeDate: new Date().toISOString().split('T')[0],
+    reason: 'Voluntary Resignation submitted by staff member',
+    handoverTo: 'Department Line Manager / Officer',
+    status: 'Inactive' as string,
+  });
 
   // Active employees list
   const activeEmployees = employees.filter(isEmployeeActive);
@@ -90,8 +114,8 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
     const q = searchQuery.toLowerCase().trim();
     const isExited = !isEmployeeActive(emp);
 
-    // If viewing separated staff, show them. Otherwise exclude separated/resigned staff unless specifically searched by ID/name
-    if (selectedStatus === 'Terminated' || selectedStatus === 'Separated') {
+    // If viewing separated or inactive staff, show them. Otherwise exclude separated/resigned/inactive staff unless specifically searched by ID/name
+    if (selectedStatus === 'Terminated' || selectedStatus === 'Separated' || selectedStatus === 'Inactive') {
       if (!isExited) return false;
     } else if (selectedStatus === 'All') {
       if (!q && isExited) {
@@ -114,7 +138,7 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
     const matchesStatus =
       selectedStatus === 'All'
         ? true
-        : selectedStatus === 'Terminated' || selectedStatus === 'Separated'
+        : selectedStatus === 'Terminated' || selectedStatus === 'Separated' || selectedStatus === 'Inactive'
         ? isExited
         : emp.status === selectedStatus;
     
@@ -334,6 +358,7 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
               <option value="Probation">Probationary Staff</option>
               <option value="Contractual">Contractual / Project Staff</option>
               <option value="On Leave">On Leave</option>
+              <option value="Inactive">Inactive / Separated Staff (নিষ্ক্রিয় কর্মী)</option>
               <option value="Terminated">Separated / Resigned Staff (Archive)</option>
             </select>
           </div>
@@ -342,8 +367,8 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
         <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
           <span>
             Showing <strong>{filtered.length}</strong>{' '}
-            {selectedStatus === 'Terminated' || selectedStatus === 'Separated'
-              ? `separated/resigned records (out of ${employees.length - activeEmployees.length} exited records)`
+            {selectedStatus === 'Terminated' || selectedStatus === 'Separated' || selectedStatus === 'Inactive'
+              ? `inactive/separated records (out of ${employees.length - activeEmployees.length} inactive records)`
               : `active personnel (out of ${activeEmployees.length} active staff)`}
           </span>
           {(searchQuery || selectedDept !== 'All' || selectedStatus !== 'All' || selectedLocation !== 'All' || selectedSupervisor !== 'All') && (
@@ -501,15 +526,47 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
                           >
                             <ExternalLink className="w-4 h-4" />
                           </button>
-                          {onInitiateSeparation && currentRole === 'hr_admin' && (
-                            <button
-                              type="button"
-                              onClick={() => onInitiateSeparation(emp)}
-                              className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                              title="Mark Separation & Final Settlement"
-                            >
-                              <UserMinus className="w-4 h-4" />
-                            </button>
+                          {!isEmployeeActive(emp) ? (
+                            onReactivateEmployee && currentRole === 'hr_admin' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (window.confirm(`Re-activate ${emp.fullName} (ID: ${emp.id}) to Active status on this exact same Employee ID?`)) {
+                                    onReactivateEmployee(
+                                      emp.id,
+                                      new Date().toISOString().split('T')[0],
+                                      'Re-activated by HR Admin on same Employee ID'
+                                    );
+                                  }
+                                }}
+                                className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                                title="Re-activate Employee on same ID (একই আইডিতে পুনরায় সক্রিয় করুন)"
+                              >
+                                <UserCheck className="w-4 h-4" />
+                              </button>
+                            )
+                          ) : (
+                            (onRecordSeparation || onInitiateSeparation) && currentRole === 'hr_admin' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEmployeeToSeparate(emp);
+                                  setSeparationDetails({
+                                    separationType: emp.separationReason || 'Resignation',
+                                    separationDate: emp.separationDate || new Date().toISOString().split('T')[0],
+                                    noticeDate: new Date().toISOString().split('T')[0],
+                                    reason: emp.separationReason || 'Voluntary Resignation submitted by staff member',
+                                    handoverTo: 'Department Line Manager / Officer',
+                                    status: 'Inactive',
+                                  });
+                                  setIsSeparationModalOpen(true);
+                                }}
+                                className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                title="Mark Inactive / Separation (নিষ্ক্রিয় করুন)"
+                              >
+                                <UserMinus className="w-4 h-4" />
+                              </button>
+                            )
                           )}
                           <button
                             type="button"
@@ -616,15 +673,47 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
                       <Edit3 className="w-3 h-3" />
                       <span>Edit</span>
                     </button>
-                    {onInitiateSeparation && currentRole === 'hr_admin' && (
-                      <button
-                        type="button"
-                        onClick={() => onInitiateSeparation(emp)}
-                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg border border-rose-200 transition-colors cursor-pointer"
-                        title="Mark Separation"
-                      >
-                        <UserMinus className="w-3.5 h-3.5" />
-                      </button>
+                    {!isEmployeeActive(emp) ? (
+                      onReactivateEmployee && currentRole === 'hr_admin' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(`Re-activate ${emp.fullName} (ID: ${emp.id}) to Active status on this exact same Employee ID?`)) {
+                              onReactivateEmployee(
+                                emp.id,
+                                new Date().toISOString().split('T')[0],
+                                'Re-activated by HR Admin on same Employee ID'
+                              );
+                            }
+                          }}
+                          className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg border border-emerald-200 transition-colors cursor-pointer"
+                          title="Re-activate Employee on same ID (একই আইডিতে পুনরায় সক্রিয় করুন)"
+                        >
+                          <UserCheck className="w-3.5 h-3.5" />
+                        </button>
+                      )
+                    ) : (
+                      (onRecordSeparation || onInitiateSeparation) && currentRole === 'hr_admin' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEmployeeToSeparate(emp);
+                            setSeparationDetails({
+                              separationType: emp.separationReason || 'Resignation',
+                              separationDate: emp.separationDate || new Date().toISOString().split('T')[0],
+                              noticeDate: new Date().toISOString().split('T')[0],
+                              reason: emp.separationReason || 'Voluntary Resignation submitted by staff member',
+                              handoverTo: 'Department Line Manager / Officer',
+                              status: 'Inactive',
+                            });
+                            setIsSeparationModalOpen(true);
+                          }}
+                          className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg border border-rose-200 transition-colors cursor-pointer"
+                          title="Mark Inactive / Separation (নিষ্ক্রিয় করুন)"
+                        >
+                          <UserMinus className="w-3.5 h-3.5" />
+                        </button>
+                      )
                     )}
                     <button
                       type="button"
@@ -638,6 +727,143 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* RECORD EMPLOYEE SEPARATION & FINAL SETTLEMENT MODAL */}
+      {isSeparationModalOpen && employeeToSeparate && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white w-full max-w-xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden text-xs">
+            {/* Modal Header */}
+            <div className="bg-rose-900 p-5 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-rose-600 flex items-center justify-center text-white shadow-md">
+                  <UserMinus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base">Record Employee Separation (কর্মী প্রস্থান রেকর্ড)</h3>
+                  <p className="text-xs text-rose-200">
+                    Staff: <span className="font-bold text-white">{employeeToSeparate.fullName}</span> ({employeeToSeparate.id}) • {employeeToSeparate.designation}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSeparationModalOpen(false);
+                  setEmployeeToSeparate(null);
+                }}
+                className="p-1.5 text-rose-200 hover:text-white rounded-lg hover:bg-rose-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (onRecordSeparation) {
+                  onRecordSeparation(employeeToSeparate, separationDetails);
+                } else if (onInitiateSeparation) {
+                  onInitiateSeparation(employeeToSeparate);
+                }
+                setIsSeparationModalOpen(false);
+                setEmployeeToSeparate(null);
+              }}
+              className="p-5 space-y-4"
+            >
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-900 text-xs leading-relaxed">
+                <strong>নির্দেশনা:</strong> এই কর্মীকে মাস্টার ডাটাবেস থেকে নিষ্ক্রিয় (Separated) হিসেবে চিহ্নিত করা হবে। ফলে তিনি সাধারণ কর্মী তালিকা ও মাসিক টাইমশীট মাস্টার সামারি থেকে বাদ পড়বেন। একই সাথে তাকে <strong>ফাইনাল সেটেলমেন্ট কোয়েরি তালিকায় (Final Settlement Query Queue)</strong> রাখা হবে যেন পরবর্তীতে অডিট করে তার প্রভিডেন্ট ফান্ড, গ্র্যাচুইটি ও পূর্ণ হিসাব নিষ্পত্তি করা যায়।
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Separation Reason / Type (প্রস্থানের কারণ) *</label>
+                  <select
+                    value={separationDetails.separationType}
+                    onChange={(e) => setSeparationDetails({ ...separationDetails, separationType: e.target.value })}
+                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white font-semibold"
+                  >
+                    <option value="Resignation">Voluntary Resignation (স্বেচ্ছায় পদত্যাগ)</option>
+                    <option value="Termination">Administrative Termination (চাকরি অবসান / বরখাস্ত)</option>
+                    <option value="Contract Expiry">Contract Cycle Expiry (চুক্তির মেয়াদ সমাপ্তি)</option>
+                    <option value="Retirement">Retirement (অবসর গ্রহণ)</option>
+                    <option value="Mutual Separation">Mutual Separation (পারস্পরিক সমঝোতা)</option>
+                    <option value="Job Abandonment">Job Abandonment (কর্মক্ষেত্র পরিত্যাগ)</option>
+                    <option value="Medical Grounds">Medical Grounds (স্বাস্থ্যগত কারণ)</option>
+                    <option value="Project Funding Closure">Project Funding Closure (প্রকল্প সমাপ্তি)</option>
+                    <option value="Disciplinary Dismissal">Disciplinary Action (শৃঙ্খলাজনিত বরখাস্ত)</option>
+                    <option value="Other">Other Reasons</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">DOS (Separation / Last Working Date) *</label>
+                  <input
+                    type="date"
+                    required
+                    value={separationDetails.separationDate}
+                    onChange={(e) => setSeparationDetails({ ...separationDetails, separationDate: e.target.value })}
+                    className="w-full p-2.5 border border-slate-200 rounded-xl font-bold bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Notice Submission Date</label>
+                  <input
+                    type="date"
+                    value={separationDetails.noticeDate}
+                    onChange={(e) => setSeparationDetails({ ...separationDetails, noticeDate: e.target.value })}
+                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Handover To (দায়িত্ব হস্তান্তর প্রাপক)</label>
+                  <input
+                    type="text"
+                    value={separationDetails.handoverTo}
+                    onChange={(e) => setSeparationDetails({ ...separationDetails, handoverTo: e.target.value })}
+                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white"
+                    placeholder="e.g. Officer Name / Line Manager"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Detailed Remarks / Reason Notes</label>
+                <textarea
+                  rows={2}
+                  value={separationDetails.reason}
+                  onChange={(e) => setSeparationDetails({ ...separationDetails, reason: e.target.value })}
+                  className="w-full p-2.5 border border-slate-200 rounded-xl bg-white"
+                  placeholder="State the reason or handover details for audit records"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSeparationModalOpen(false);
+                    setEmployeeToSeparate(null);
+                  }}
+                  className="px-4 py-2 text-slate-600 hover:text-slate-900 font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex items-center gap-2 bg-rose-600 hover:bg-rose-700 text-white font-bold px-5 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
+                >
+                  <UserMinus className="w-4 h-4" />
+                  <span>Confirm Separation & Move to Final Settlement Query</span>
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

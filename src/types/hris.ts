@@ -104,11 +104,13 @@ export interface Employee {
   specialProjectAllowance: number;
   pfDeductionPercentage: number;
   taxDeduction: number;
+  netSalary?: number;
 
   // Additional details from master record
   personalEmail?: string | null;
   highestEducation?: string | null;
   professionalEducation?: string | null;
+  certificateNumber?: string | null;
   fatherOrSpouseName?: string | null;
   motherName?: string | null;
   religion?: string | null;

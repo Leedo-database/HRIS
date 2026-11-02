@@ -22,7 +22,7 @@ import {
   FileText,
   CalendarCheck2
 } from 'lucide-react';
-import { formatCurrency, numberToWords, getMonthHolidayMetrics } from '../../utils/calculations';
+import { formatCurrency, numberToWords, getMonthHolidayMetrics, isEmployeeActive } from '../../utils/calculations';
 import { exportPayslipToDocx } from '../../utils/docxExport';
 
 interface PayrollModuleProps {
@@ -88,8 +88,8 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
     mobileBankingNumber: '',
   });
 
-  // Only active employees are included in salary processing
-  const activeStaff = employees.filter((e) => e.status !== 'Separated' && e.status !== 'Terminated');
+  // Only active employees are included in salary processing (excludes Inactive, Separated, Terminated)
+  const activeStaff = employees.filter(isEmployeeActive);
   const activeStaffIds = new Set(activeStaff.map((e) => e.id));
 
   // Filter records by selected month and active employment status

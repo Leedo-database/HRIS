@@ -534,7 +534,8 @@ export function calculateMonthlyStaffTimesheetSummary(
     const actualWorkedDays = presentRecords.length > 0 ? presentRecords.length : Math.min(scheduledDutyDays, Math.max(1, scheduledDutyDays - (emp.id === '1001' ? 0 : 1)));
     
     const loggedHours = presentRecords.reduce((sum, a) => sum + (Number(a.hoursWorked) || dailyHours), 0);
-    const totalWorkedHours = loggedHours > 0 ? loggedHours : actualWorkedDays * dailyHours;
+    const rawTotalWorkedHours = loggedHours > 0 ? loggedHours : actualWorkedDays * dailyHours;
+    const totalWorkedHours = Math.round(rawTotalWorkedHours * 10) / 10;
 
     const empLeaves = leaves.filter((l) => l.employeeId === emp.id && l.status === 'Approved');
     const leaveDays = empLeaves.reduce((sum, l) => sum + (Number(l.daysCount) || 0), 0);
@@ -559,5 +560,16 @@ export function calculateMonthlyStaffTimesheetSummary(
       dutyFulfillmentRate,
     };
   });
+}
+
+/**
+ * Formats duty hours to clean precision (e.g., 32.7 hrs or 152.3 hrs) without floating point artifacts like 152.29999999999998 hrs.
+ */
+export function formatHours(hours: number | string | undefined | null): string {
+  if (hours === undefined || hours === null || hours === '') return '0 hrs';
+  const num = Number(hours);
+  if (isNaN(num)) return '0 hrs';
+  const rounded = Math.round(num * 10) / 10;
+  return `${Number(rounded.toFixed(1))} hrs`;
 }
 

@@ -101,7 +101,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'timesheets' as NavTab,
-      label: currentRole === 'employee' ? 'My Project Timesheet' : 'Project Timesheets (NGO)',
+      label: currentRole === 'employee' ? 'My Timesheet' : 'Timesheet',
       icon: CalendarCheck2,
       badge: currentRole !== 'employee' && pendingTimesheetsCount > 0 ? pendingTimesheetsCount : undefined,
       roles: ['hr_admin', 'line_manager', 'employee'],

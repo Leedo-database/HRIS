@@ -425,20 +425,50 @@ export default function App() {
   }, []);
 
   // Save changes to localStorage & Cloud
+  // Save changes to localStorage & Cloud with full salary cascade and netSalary calculation
   const handleSaveEmployee = (emp: Employee) => {
+    // 1. Recalculate & standardize salary breakdown and net take-home salary
+    const gross = Number(emp.grossSalary) || 0;
+    const basic = Number(emp.basicSalary) || Math.round(gross * 0.5);
+    const house = Number(emp.houseRent) || Math.round(gross * 0.25);
+    const med = Number(emp.medicalAllowance) || Math.round(gross * 0.1);
+    const conv = Number(emp.conveyanceAllowance) || Math.round(gross * 0.1);
+    const special = Number(emp.specialProjectAllowance) || 0;
+    const mobile = emp.mobileAllowance ?? 1000;
+    const travel = emp.travelAllowance ?? 2000;
+    const advance = emp.advanceBalance ?? 0;
+    const tax = emp.taxDeduction ?? (gross > 40000 ? Math.round((gross - 40000) * 0.05) : 0);
+    const pf = Math.round(basic * (emp.pfDeductionPercentage ?? 8) / 100);
+    const net = Math.max(0, gross + mobile + travel - tax - pf - advance);
+
+    const finalizedEmp: Employee = {
+      ...emp,
+      grossSalary: gross,
+      basicSalary: basic,
+      houseRent: house,
+      medicalAllowance: med,
+      conveyanceAllowance: conv,
+      specialProjectAllowance: special,
+      mobileAllowance: mobile,
+      travelAllowance: travel,
+      advanceBalance: advance,
+      taxDeduction: tax,
+      netSalary: net,
+    };
+
     let updated: Employee[];
-    const exists = employees.some((e) => e.id === emp.id);
+    const exists = employees.some((e) => e.id === finalizedEmp.id);
     if (exists) {
-      updated = employees.map((e) => (e.id === emp.id ? emp : e));
+      updated = employees.map((e) => (e.id === finalizedEmp.id ? finalizedEmp : e));
     } else {
-      updated = [emp, ...employees];
+      updated = [finalizedEmp, ...employees];
       const newCreds = {
         ...credentials,
-        [emp.id]: {
-          employeeId: emp.id,
-          password: emp.id,
+        [finalizedEmp.id]: {
+          employeeId: finalizedEmp.id,
+          password: finalizedEmp.id,
           mustChangePassword: true,
-          role: 'employee' as UserRole,
+          role: resolveEmployeeRole(finalizedEmp),
         },
       };
       setCredentials(newCreds);
@@ -447,43 +477,72 @@ export default function App() {
     setEmployees(updated);
     saveToStorage(STORAGE_KEYS.EMPLOYEES, updated);
     setSyncStatus('syncing');
-    saveEmployeeToCloud(emp)
+    saveEmployeeToCloud(finalizedEmp)
       .then(() => setSyncStatus('synced'))
       .catch(() => setSyncStatus('offline'));
 
+    // 2. Cascade salary update to all payroll records for this employee
+    setPayroll((prev) => {
+      const updatedPayroll = prev.map((p) => {
+        if (p.employeeId === finalizedEmp.id) {
+          const totalEarn = finalizedEmp.grossSalary + (finalizedEmp.mobileAllowance || 0) + (finalizedEmp.travelAllowance || 0);
+          const pTax = finalizedEmp.taxDeduction || 0;
+          const pPf = Math.round(finalizedEmp.basicSalary * (finalizedEmp.pfDeductionPercentage || 8) / 100);
+          const pNet = Math.max(0, totalEarn - pTax - pPf - (p.absentDeduction || 0) - (p.advanceDeduction || 0));
+          return {
+            ...p,
+            grossSalary: finalizedEmp.grossSalary,
+            basicSalary: finalizedEmp.basicSalary,
+            houseRent: finalizedEmp.houseRent,
+            medicalAllowance: finalizedEmp.medicalAllowance,
+            conveyanceAllowance: finalizedEmp.conveyanceAllowance,
+            mobileAllowance: finalizedEmp.mobileAllowance,
+            travelAllowance: finalizedEmp.travelAllowance,
+            totalEarnings: totalEarn,
+            tax: pTax,
+            providentFund: pPf,
+            netSalary: pNet,
+          };
+        }
+        return p;
+      });
+      saveToStorage(STORAGE_KEYS.PAYROLL, updatedPayroll);
+      return updatedPayroll;
+    });
+
     // If updated employee is the active user, update currentUser state
-    if (currentUser.id === emp.id) {
-      setCurrentUser(emp);
+    if (currentUser.id === finalizedEmp.id) {
+      setCurrentUser(finalizedEmp);
     }
 
-    // If marked Separated or Terminated, auto-generate separation docket and open settlement view
-    if (emp.status === 'Separated' || emp.status === 'Terminated') {
-      const existingSep = separations.find((s) => s.employeeId === emp.id);
+    // If marked Separated or Terminated, auto-generate separation docket in final settlement queue
+    if (finalizedEmp.status === 'Separated' || finalizedEmp.status === 'Terminated') {
+      const existingSep = separations.find((s) => s.employeeId === finalizedEmp.id);
       if (!existingSep) {
-        const joinYear = new Date(emp.joiningDate).getFullYear();
+        const joinYear = new Date(finalizedEmp.joiningDate).getFullYear();
         const serviceYears = Math.max(1, 2026 - joinYear);
-        const lastMonthSalary = emp.grossSalary;
-        const pfSettlement = Math.round(emp.basicSalary * 0.16 * 12 * serviceYears);
-        const gratuity = serviceYears >= 3 ? Math.round(emp.basicSalary * serviceYears) : 0;
+        const lastMonthSalary = finalizedEmp.grossSalary;
+        const pfSettlement = Math.round(finalizedEmp.basicSalary * 0.16 * 12 * serviceYears);
+        const gratuity = serviceYears >= 3 ? Math.round(finalizedEmp.basicSalary * serviceYears) : 0;
         const leaveEncashmentDays = 8;
-        const leaveEncashmentAmount = Math.round((emp.basicSalary / 30) * leaveEncashmentDays);
-        const advanceDeduction = emp.advanceBalance || 0;
+        const leaveEncashmentAmount = Math.round((finalizedEmp.basicSalary / 30) * leaveEncashmentDays);
+        const advanceDeduction = finalizedEmp.advanceBalance || 0;
         const netSettlement = Math.max(0, lastMonthSalary + pfSettlement + gratuity + leaveEncashmentAmount - advanceDeduction);
 
         const newSep: SeparationRecord = {
           id: `SEP-2026-${Date.now().toString().slice(-4)}`,
-          employeeId: emp.id,
-          employeeName: emp.fullName,
-          designation: emp.designation,
-          department: emp.department,
-          joiningDate: emp.joiningDate,
-          separationType: (emp.separationReason as any) || 'Resignation',
+          employeeId: finalizedEmp.id,
+          employeeName: finalizedEmp.fullName,
+          designation: finalizedEmp.designation,
+          department: finalizedEmp.department,
+          joiningDate: finalizedEmp.joiningDate,
+          separationType: (finalizedEmp.separationReason as any) || 'Resignation',
           noticeDate: new Date().toISOString().split('T')[0],
-          lastWorkingDate: emp.separationDate || new Date().toISOString().split('T')[0],
-          reason: emp.separationReason || 'Separation recorded by HR Admin',
+          lastWorkingDate: finalizedEmp.separationDate || new Date().toISOString().split('T')[0],
+          reason: finalizedEmp.separationReason || 'Separation recorded by HR Admin',
           handoverTo: 'Designated Department Officer',
           departmentClearance: true,
-          financeClearance: true,
+          financeClearance: false,
           adminAssetClearance: false,
           itEquipmentClearance: false,
           lastMonthSalary,
@@ -499,11 +558,137 @@ export default function App() {
         const updatedSeps = [newSep, ...separations];
         setSeparations(updatedSeps);
         saveToStorage(STORAGE_KEYS.SEPARATIONS, updatedSeps);
-        saveSeparationToCloud(newSep);
+        saveSeparationToCloud(newSep).catch(() => {});
       }
-      setSeparationInitialStaffId(emp.id);
-      setActiveTab('separation');
+      setSeparationInitialStaffId(finalizedEmp.id);
     }
+  };
+
+  // Direct Separation with Reason and Queue for Final Settlement
+  const handleRecordSeparation = (
+    emp: Employee,
+    details: {
+      separationType: string;
+      separationDate: string;
+      noticeDate: string;
+      reason: string;
+      handoverTo: string;
+      status?: string;
+    }
+  ) => {
+    const joinYear = new Date(emp.joiningDate).getFullYear();
+    const serviceYears = Math.max(1, 2026 - joinYear);
+    const lastMonthSalary = emp.grossSalary;
+    const pfSettlement = Math.round(emp.basicSalary * 0.16 * 12 * serviceYears);
+    const gratuity = serviceYears >= 3 ? Math.round(emp.basicSalary * serviceYears) : 0;
+    const leaveEncashmentDays = 8;
+    const leaveEncashmentAmount = Math.round((emp.basicSalary / 30) * leaveEncashmentDays);
+    const advanceDeduction = emp.advanceBalance || 0;
+    const netSettlement = Math.max(0, lastMonthSalary + pfSettlement + gratuity + leaveEncashmentAmount - advanceDeduction);
+
+    const newSep: SeparationRecord = {
+      id: `SEP-2026-${Date.now().toString().slice(-4)}`,
+      employeeId: emp.id,
+      employeeName: emp.fullName,
+      designation: emp.designation,
+      department: emp.department,
+      joiningDate: emp.joiningDate,
+      separationType: (details.separationType as any) || 'Resignation',
+      noticeDate: details.noticeDate || new Date().toISOString().split('T')[0],
+      lastWorkingDate: details.separationDate || new Date().toISOString().split('T')[0],
+      reason: details.reason || details.separationType,
+      handoverTo: details.handoverTo || 'Designated Department Officer',
+      departmentClearance: true,
+      financeClearance: false,
+      adminAssetClearance: false,
+      itEquipmentClearance: false,
+      lastMonthSalary,
+      providentFundSettlement: pfSettlement,
+      gratuitySettlement: gratuity,
+      leaveEncashmentDays,
+      leaveEncashmentAmount,
+      deductionsOrAdvances: advanceDeduction,
+      netSettlementAmount: netSettlement,
+      clearanceStatus: 'Clearance In Progress',
+      experienceLetterIssued: false,
+    };
+
+    const updatedSeps = [newSep, ...separations.filter((s) => s.employeeId !== emp.id)];
+    setSeparations(updatedSeps);
+    saveToStorage(STORAGE_KEYS.SEPARATIONS, updatedSeps);
+    saveSeparationToCloud(newSep).catch(() => {});
+
+    // Update employee status in database and sync to cloud
+    const chosenStatus = details.status || 'Separated';
+    let updatedEmpRecord: Employee | null = null;
+    const updatedEmployees = employees.map((e) => {
+      if (e.id === emp.id) {
+        const separatedEmp: Employee = {
+          ...e,
+          status: chosenStatus as any,
+          separationDate: details.separationDate,
+          separationReason: details.reason || details.separationType,
+          remarks: details.reason ? `${chosenStatus} (${details.separationType}): ${details.reason}` : e.remarks,
+        };
+        updatedEmpRecord = separatedEmp;
+        saveEmployeeToCloud(separatedEmp).catch(() => {});
+        return separatedEmp;
+      }
+      return e;
+    });
+
+    setEmployees(updatedEmployees);
+    saveToStorage(STORAGE_KEYS.EMPLOYEES, updatedEmployees);
+    if (updatedEmpRecord && selectedEmployeeForDetail?.id === emp.id) {
+      setSelectedEmployeeForDetail(updatedEmpRecord);
+    }
+    setSeparationInitialStaffId(emp.id);
+  };
+
+  // Re-activate previously Inactive / Separated employee on the EXACT SAME Employee ID
+  const handleReactivateEmployee = (
+    empId: string,
+    rejoiningDate: string = new Date().toISOString().split('T')[0],
+    notes: string = 'Re-activated by HR Admin on same Employee ID'
+  ) => {
+    let revalidatedEmp: Employee | null = null;
+    const updatedEmployees = employees.map((e) => {
+      if (e.id === empId) {
+        const rejoiningNote = `[Rejoined: ${rejoiningDate}] ${notes}`;
+        const updatedRemarks = e.remarks ? `${e.remarks} • ${rejoiningNote}` : rejoiningNote;
+        const activeEmp: Employee = {
+          ...e,
+          status: 'Active',
+          separationDate: undefined,
+          separationReason: undefined,
+          remarks: updatedRemarks,
+        };
+        revalidatedEmp = activeEmp;
+        saveEmployeeToCloud(activeEmp).catch(() => {});
+        return activeEmp;
+      }
+      return e;
+    });
+
+    setEmployees(updatedEmployees);
+    saveToStorage(STORAGE_KEYS.EMPLOYEES, updatedEmployees);
+
+    if (revalidatedEmp && selectedEmployeeForDetail?.id === empId) {
+      setSelectedEmployeeForDetail(revalidatedEmp);
+    }
+
+    // Mark any existing separation dossier for this staff as Reinstated
+    const updatedSeps = separations.map((s) => {
+      if (s.employeeId === empId) {
+        return {
+          ...s,
+          clearanceStatus: 'Reinstated / Re-activated' as any,
+        };
+      }
+      return s;
+    });
+    setSeparations(updatedSeps);
+    saveToStorage(STORAGE_KEYS.SEPARATIONS, updatedSeps);
   };
 
   const handleUpdateCurrentUserProfile = (updatedEmp: Employee) => {
@@ -958,6 +1143,8 @@ export default function App() {
                     setSeparationInitialStaffId(emp.id);
                     setActiveTab('separation');
                   }}
+                  onRecordSeparation={handleRecordSeparation}
+                  onReactivateEmployee={handleReactivateEmployee}
                   onGenerateLetter={(emp, type) => {
                     setLetterDraftEmployee(emp);
                     setLetterDraftType(type as LetterType);
@@ -1168,6 +1355,8 @@ export default function App() {
           currentRole={currentRole}
           issuedLetters={issuedLetters}
           onUpdateEmployee={handleSaveEmployee}
+          onRecordSeparation={handleRecordSeparation}
+          onReactivateEmployee={handleReactivateEmployee}
           onEdit={(emp) => {
             setEmployeeToEdit(emp);
             setIsAddEmployeeOpen(true);
