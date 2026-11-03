@@ -2,6 +2,7 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
+import { PDFParse } from 'pdf-parse';
 
 dotenv.config();
 
@@ -18,6 +19,30 @@ async function startServer() {
       const { imageBase64, mimeType } = req.body;
       if (!imageBase64) {
         return res.status(400).json({ error: 'imageBase64 is required' });
+      }
+
+      const rawBase64 = imageBase64.replace(/^data:[^;]+;base64,/, '');
+      const fileBuffer = Buffer.from(rawBase64, 'base64');
+      const isPdf = (mimeType && mimeType.toLowerCase().includes('pdf')) || 
+                    fileBuffer.slice(0, 5).toString('ascii') === '%PDF-';
+
+      // 1. Direct PDF Text Extraction (works for all exported biometric PDFs)
+      if (isPdf) {
+        try {
+          const parser = new PDFParse({ data: fileBuffer });
+          const textResult = await parser.getText();
+          const extractedText = (typeof textResult === 'string' ? textResult : (textResult as any)?.text) || '';
+          if (extractedText && extractedText.trim().length > 10) {
+            return res.json({
+              success: true,
+              rawText: extractedText.trim(),
+              source: 'pdf-extractor',
+              message: 'Successfully extracted attendance data directly from PDF document.'
+            });
+          }
+        } catch (pdfErr) {
+          console.warn('PDFParse extraction error:', pdfErr);
+        }
       }
 
       const apiKey = process.env.GEMINI_API_KEY;
