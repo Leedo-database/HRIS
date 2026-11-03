@@ -533,7 +533,7 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
     });
 
     onImportRecords(newAttendanceRecords);
-    alert(`Successfully imported ${newAttendanceRecords.length} attendance records from biometric machine data!`);
+    alert(`সফলভাবে ${newAttendanceRecords.length}টি বায়োমেট্রিক উপস্থিতি রেকর্ড ইমপোর্ট হয়েছে! এটি সরাসরি Attendance এবং Timesheet (টাইমশীট)-এ আপডেট হয়ে গেছে।`);
     onClose();
   };
 
@@ -721,6 +721,7 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
                     onClick={() => {
                       setRawText(UPLOADED_SHEET_RAW_CSV);
                       processText(UPLOADED_SHEET_RAW_CSV);
+                      setHasParsed(true);
                     }}
                     className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold rounded-xl cursor-pointer transition-colors shadow-2xs flex items-center gap-1"
                     title="Load official machine logs into textarea"
@@ -747,7 +748,10 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => processText(rawText)}
+                    onClick={() => {
+                      processText(rawText);
+                      setHasParsed(true);
+                    }}
                     disabled={!rawText.trim()}
                     className={`px-4 py-1.5 font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5 ${
                       rawText.trim()

@@ -776,6 +776,79 @@ export default function App() {
       saveToStorage(STORAGE_KEYS.ATTENDANCE, merged);
       return merged;
     });
+
+    // Auto-sync / generate corresponding TimesheetEntry records for imported employees
+    setTimesheets((prev) => {
+      const updatedTimesheets = [...prev];
+      const empIds = Array.from(new Set(importedRecords.map((r) => r.employeeId)));
+
+      empIds.forEach((empId) => {
+        const emp = employees.find((e) => e.id === empId);
+        const empRecords = importedRecords.filter((r) => r.employeeId === empId);
+        if (!emp) return;
+
+        // Group records into weekly blocks (Monday-based weeks)
+        const weekMap = new Map<string, AttendanceRecord[]>();
+        empRecords.forEach((r) => {
+          const d = new Date(r.date);
+          const day = d.getDay();
+          const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+          const monday = new Date(d.setDate(diff));
+          const mondayStr = monday.toISOString().split('T')[0];
+          if (!weekMap.has(mondayStr)) weekMap.set(mondayStr, []);
+          weekMap.get(mondayStr)!.push(r);
+        });
+
+        weekMap.forEach((recs, weekStart) => {
+          const hours: { mon: number; tue: number; wed: number; thu: number; fri: number; sat: number; sun: number } = {
+            mon: 0,
+            tue: 0,
+            wed: 0,
+            thu: 0,
+            fri: 0,
+            sat: 0,
+            sun: 0,
+          };
+          const dayKeys: (keyof typeof hours)[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+          recs.forEach((r) => {
+            const dayIdx = new Date(r.date).getDay();
+            const key = dayKeys[dayIdx];
+            const h = Number(r.hoursWorked) || 8;
+            hours[key] = Math.round(((hours[key] || 0) + h) * 10) / 10;
+          });
+          const totalHours = Math.round(Object.values(hours).reduce((sum, h) => sum + h, 0) * 10) / 10;
+          const entryId = `TS-BIO-${emp.id}-${weekStart}`;
+
+          const existingIdx = updatedTimesheets.findIndex(
+            (t) => t.id === entryId || (t.employeeId === emp.id && t.weekStarting === weekStart)
+          );
+
+          const entry: TimesheetEntry = {
+            id: existingIdx >= 0 ? updatedTimesheets[existingIdx].id : entryId,
+            employeeId: emp.id,
+            employeeName: emp.fullName,
+            weekStarting: weekStart,
+            projectCode: 'LEEDO-CP-2026',
+            projectName: emp.assignedProject || 'Street Children Shelter & Rescue Mission',
+            activityDescription: `Biometric Machine Duty Verified: ${recs.length} biometric duty records logged at ${emp.workStation || 'Assigned Center'}.`,
+            hours,
+            totalHours,
+            status: 'Approved',
+            supervisorComment: 'Auto-verified via official biometric fingerprint machine import',
+          };
+
+          if (existingIdx >= 0) {
+            updatedTimesheets[existingIdx] = entry;
+          } else {
+            updatedTimesheets.unshift(entry);
+          }
+          saveTimesheetToCloud(entry);
+        });
+      });
+
+      saveToStorage(STORAGE_KEYS.TIMESHEETS, updatedTimesheets);
+      return updatedTimesheets;
+    });
   };
 
   const handleAddLeave = (leave: LeaveRequest) => {

@@ -37,7 +37,9 @@ import {
   FileSpreadsheet,
   ShieldAlert,
   Eye,
-  EyeOff
+  EyeOff,
+  Fingerprint,
+  BadgeCheck
 } from 'lucide-react';
 
 interface TimesheetModuleProps {
@@ -128,6 +130,20 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
   // Modal 1: Individual Employee Monthly Timesheet Print Modal (Monthly, Not Weekly)
   const [selectedMonthlyPrintEmp, setSelectedMonthlyPrintEmp] = useState<Employee | null>(null);
   const [quickPrintEmployeeId, setQuickPrintEmployeeId] = useState<string>(currentUser.id);
+
+  // Selected employee whose detailed 31-day timesheet is currently shown on screen
+  const [selectedViewEmployeeId, setSelectedViewEmployeeId] = useState<string>(() => {
+    // If current role is HR or Line Manager, check if someone with biometric attendance exists (e.g. 1004 or 1002), else currentUser
+    return currentUser.id;
+  });
+
+  // Duty Timesheet View Mode:
+  // 1) 'individual': View selected staff member's complete 31-day timesheet with biometric punch logs
+  // 2) 'master_summary': HR master summary table for all staff
+  // 3) 'biometric_logs': Direct table of all imported biometric machine punches
+  const [dutyViewMode, setDutyViewMode] = useState<'individual' | 'master_summary' | 'biometric_logs'>(
+    currentRole === 'employee' ? 'individual' : 'individual'
+  );
 
   // Modal 2: HR Master All-Staff Monthly Timesheet Summary Print Modal
   const [isMasterSummaryPrintModalOpen, setIsMasterSummaryPrintModalOpen] = useState(false);
@@ -311,8 +327,67 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
       let clockInTime: string | undefined;
       let clockOutTime: string | undefined;
 
-      // 1. Official Bangladesh Government Holiday (Paid Day Off)
-      if (hol) {
+      // 1. Check Attendance Record FIRST (Biometric Machine punch or Web Clock-In)
+      const attMatch = empAttRecords.find((a) => a.date === dateStr);
+
+      if (attMatch && (attMatch.clockInTime || attMatch.hoursWorked || attMatch.status === 'Present' || attMatch.status === 'Late')) {
+        clockInTime = attMatch.clockInTime;
+        clockOutTime = attMatch.clockOutTime;
+
+        // Midnight Auto-Checkout Rule:
+        // "jodi kew check out dite vule jay thole se rat 12 tar por auto check out hoye jabe and ta check out time 07 ta dora hobe"
+        if (clockInTime && (!clockOutTime || clockOutTime.trim() === '')) {
+          if (dateStr < todayStr) {
+            const inH = parseInt(clockInTime.split(':')[0], 10) || 10;
+            if (inH < 19) {
+              clockOutTime = '19:00:00';
+            } else {
+              clockOutTime = '06:00:00';
+            }
+          }
+        }
+
+        if (clockInTime && clockOutTime) {
+          hoursLogged = Math.round(calculateDailyHours(clockInTime, clockOutTime) * 10) / 10;
+        } else if (attMatch.hoursWorked !== undefined && attMatch.hoursWorked !== null) {
+          hoursLogged = Math.round(Number(attMatch.hoursWorked) * 10) / 10;
+        } else {
+          hoursLogged = dailyHours;
+        }
+
+        if (hoursLogged <= 0) hoursLogged = dailyHours;
+
+        if (attMatch.status === 'Late') {
+          isLate = true;
+          lateDays++;
+          presentDays++;
+          totalWorkedHours = Math.round((totalWorkedHours + hoursLogged) * 10) / 10;
+          const [inH, inM] = (attMatch.clockInTime || '10:35').split(':').map(Number);
+          lateMinutes = Math.max(1, ((inH || 10) * 60 + (inM || 0)) - (10 * 60));
+          status = 'Late Arrival (বিলম্ব)';
+          notes = `Late In: ${clockInTime} (+${lateMinutes}m late) • Shift: ${emp.shiftStartTime || '10:00'}-${emp.shiftEndTime || '18:00'}${clockOutTime === '19:00:00' && !attMatch.clockOutTime ? ' (রাত ১২টার পর অটো-চেকআউট সন্ধ্যা ০৭:০০)' : ''}`;
+        } else {
+          presentDays++;
+          totalWorkedHours = Math.round((totalWorkedHours + hoursLogged) * 10) / 10;
+          if (hol) {
+            status = 'Govt Holiday Duty (সরকারি ছুটির দিনে ডিউটি)';
+            notes = `Special Duty on Gazetted Public Holiday: ${hol.titleBangla || hol.title} (${clockInTime || '10:00'} - ${clockOutTime || '18:00'})`;
+          } else if (!isScheduledDuty) {
+            status = 'Weekend Duty (সাপ্তাহিক ছুটিতে ডিউটি)';
+            notes = `Extra Duty Performed on Roster Off-Day (${clockInTime || '10:00'} - ${clockOutTime || '18:00'})`;
+          } else {
+            status = 'Present / Duty Performed';
+            notes = `${emp.assignedProject || 'Street Children Shelter & Community Hub'} (${clockInTime || emp.shiftStartTime || '10:00'} - ${clockOutTime || emp.shiftEndTime || '18:00'})${clockOutTime === '19:00:00' && !attMatch.clockOutTime ? ' (রাত ১২টার পর অটো-চেকআউট সন্ধ্যা ০৭:০০)' : ''}`;
+          }
+        }
+      } else if (attMatch && attMatch.status === 'Absent') {
+        isAbsent = true;
+        status = 'Absent (অনুপস্থিত)';
+        hoursLogged = 0;
+        absentDays++;
+        notes = 'Unapproved absence / No punch recorded';
+      } else if (hol) {
+        // 2. Official Bangladesh Government Holiday (Paid Day Off)
         isHoliday = true;
         govtHolidayDays++;
         status = `Govt Holiday (সরকারি ছুটি)`;
@@ -320,7 +395,7 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
         totalWorkedHours = Math.round((totalWorkedHours + dailyHours) * 10) / 10;
         notes = `Official Gazette Public Holiday: ${hol.titleBangla || hol.title} (Paid Day Off)`;
       } else {
-        // 2. Check Approved Leave
+        // 3. Check Approved Leave
         const leaveMatch = empLeaves.find(
           (l) => dateStr >= l.startDate && dateStr <= l.endDate
         );
@@ -330,78 +405,29 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
           hoursLogged = 0;
           leaveDays++;
           notes = `Approved Leave: ${leaveMatch.reason || leaveMatch.leaveType}`;
-        } else if (isScheduledDuty) {
+        } else if (!isScheduledDuty) {
+          status = 'Weekly Off-Day';
+          hoursLogged = 0;
+          notes = 'Weekend / Rostered Rest Day';
+        } else {
+          // Scheduled duty day without attendance record
           scheduledDutyDays++;
-
-          // 3. Check Attendance Record (from Biometric machine or Clock-In)
-          const attMatch = empAttRecords.find((a) => a.date === dateStr);
-
-          if (attMatch) {
-            clockInTime = attMatch.clockInTime;
-            clockOutTime = attMatch.clockOutTime;
-
-            // Midnight Auto-Checkout Rule:
-            // "jodi kew check out dite vule jay thole se rat 12 tar por auto check out hoye jabe and ta check out time 07 ta dora hobe"
-            if (clockInTime && (!clockOutTime || clockOutTime.trim() === '')) {
-              if (dateStr < todayStr) {
-                clockOutTime = '19:00:00';
-              }
-            }
-
-            if (clockInTime && clockOutTime) {
-              hoursLogged = Math.round(calculateDailyHours(clockInTime, clockOutTime) * 10) / 10;
-            } else if (attMatch.hoursWorked !== undefined && attMatch.hoursWorked !== null) {
-              hoursLogged = Math.round(Number(attMatch.hoursWorked) * 10) / 10;
-            } else {
-              hoursLogged = dailyHours;
-            }
-
-            if (attMatch.status === 'Late') {
-              isLate = true;
-              lateDays++;
-              presentDays++;
-              totalWorkedHours = Math.round((totalWorkedHours + hoursLogged) * 10) / 10;
-              // Extract late minutes or calculate
-              const [inH, inM] = (attMatch.clockInTime || '10:35').split(':').map(Number);
-              lateMinutes = Math.max(1, ((inH || 10) * 60 + (inM || 0)) - (10 * 60));
-              status = 'Late Arrival (বিলম্ব)';
-              notes = `Late In: ${clockInTime} (+${lateMinutes}m late) • Shift: ${emp.shiftStartTime || '10:00'}-${emp.shiftEndTime || '18:00'}${clockOutTime === '19:00:00' && !attMatch.clockOutTime ? ' (রাত ১২টার পর অটো-চেকআউট সন্ধ্যা ০৭:০০)' : ''}`;
-            } else if (attMatch.status === 'Absent') {
-              isAbsent = true;
-              status = 'Absent (অনুপস্থিত)';
-              hoursLogged = 0;
-              absentDays++;
-              notes = 'Unapproved absence / No punch recorded';
-            } else {
-              // Present on time
-              status = 'Present / Duty Performed';
-              totalWorkedHours = Math.round((totalWorkedHours + hoursLogged) * 10) / 10;
-              presentDays++;
-              notes = `${emp.assignedProject || 'Street Children Shelter & Community Hub'} (${clockInTime || emp.shiftStartTime || '10:00'} - ${clockOutTime || emp.shiftEndTime || '18:00'})${clockOutTime === '19:00:00' && !attMatch.clockOutTime ? ' (রাত ১২টার পর অটো-চেকআউট সন্ধ্যা ০৭:০০)' : ''}`;
-            }
+          if (autoMarkMissingBiometricAsAbsent && dateStr <= todayStr) {
+            isAbsent = true;
+            status = 'Absent (অনুপস্থিত / নো বায়োমেট্রিক পাঞ্চ)';
+            hoursLogged = 0;
+            absentDays++;
+            notes = 'বায়োমেট্রিক মেশিনে কোনো পাঞ্চ রেকর্ড নেই এবং অনুমোদিত ছুটির আবেদনও নেই (Unapproved Absence)';
+          } else if (dateStr > todayStr) {
+            status = 'Upcoming Duty (অনাগত কার্যদিবস)';
+            hoursLogged = 0;
+            notes = `Scheduled Duty: ${emp.assignedProject || 'LEEDO Shelter & Field'} (${emp.shiftStartTime || '10:00'} - ${emp.shiftEndTime || '18:00'})`;
           } else {
-            // Scheduled duty day without attendance record
-            // Strictly enforce HR rule requested by user:
-            // "bio matrik r data na thakle and kono leave application e na thakle absent dorben"
-            if (autoMarkMissingBiometricAsAbsent && dateStr <= todayStr) {
-              isAbsent = true;
-              status = 'Absent (অনুপস্থিত / নো বায়োমেট্রিক পাঞ্চ)';
-              hoursLogged = 0;
-              absentDays++;
-              notes = 'বায়োমেট্রিক মেশিনে কোনো পাঞ্চ রেকর্ড নেই এবং অনুমোদিত ছুটির আবেদনও নেই (Unapproved Absence)';
-            } else if (dateStr > todayStr) {
-              // Future upcoming duty day in this month
-              status = 'Upcoming Duty (অনাগত কার্যদিবস)';
-              hoursLogged = 0;
-              notes = `Scheduled Duty: ${emp.assignedProject || 'LEEDO Shelter & Field'} (${emp.shiftStartTime || '10:00'} - ${emp.shiftEndTime || '18:00'})`;
-            } else {
-              // Standard duty performed fallback when auto-absent is manually toggled off
-              status = 'Present / Duty Performed';
-              hoursLogged = dailyHours;
-              presentDays++;
-              totalWorkedHours = Math.round((totalWorkedHours + dailyHours) * 10) / 10;
-              notes = `${emp.assignedProject || 'Street Children Shelter & Community Hub'} (${emp.shiftStartTime || '10:00'} - ${emp.shiftEndTime || '18:00'})`;
-            }
+            status = 'Present / Duty Performed';
+            hoursLogged = dailyHours;
+            presentDays++;
+            totalWorkedHours = Math.round((totalWorkedHours + dailyHours) * 10) / 10;
+            notes = `${emp.assignedProject || 'Street Children Shelter & Community Hub'} (${emp.shiftStartTime || '10:00'} - ${emp.shiftEndTime || '18:00'})`;
           }
         }
       }
@@ -725,58 +751,78 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
 
       {activeTimesheetSubTab === 'duty_timesheet' ? (
         <>
-          {/* Individual Employee Timesheet Print Selector (HR Admin & Managers can select ANY employee) */}
-          <div className="no-print bg-gradient-to-r from-indigo-900 to-slate-900 p-4 sm:p-5 rounded-3xl text-white shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <Printer className="w-5 h-5 text-indigo-400" />
-                <h3 className="font-bold text-sm sm:text-base text-white">
-                  {currentRole === 'employee'
-                    ? 'Print My Monthly Certified Timesheet (আমার মাসিক টাইমশীট প্রিন্ট)'
-                    : 'Print Staff Monthly Timesheet (একক কর্মীর মাসিক টাইমশীট প্রিন্ট)'}
-                </h3>
-              </div>
-              <p className="text-xs text-indigo-200">
-                {currentRole === 'employee'
-                  ? `View & print your verified certified monthly timesheet docket for ${monthLabel} with daily hours and official signature seals.`
-                  : `Select staff from roster to view & print their certified monthly timesheet docket for ${monthLabel}.`}
-              </p>
-            </div>
-
-            {currentRole === 'employee' ? (
+          {/* Duty Timesheet Sub-Navigation: Individual Timesheet vs All-Staff Master vs Biometric Log History */}
+          <div className="no-print bg-white p-3 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={() => setSelectedMonthlyPrintEmp(currentUser)}
-                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-lg transition-all cursor-pointer whitespace-nowrap"
+                onClick={() => setDutyViewMode('individual')}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer ${
+                  dutyViewMode === 'individual'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
               >
-                <Printer className="w-4 h-4" />
-                <span>Print My Monthly Timesheet (আমার টাইমশীট প্রিন্ট করুন)</span>
+                <CalendarCheck2 className="w-3.5 h-3.5" />
+                <span>Detailed Staff Timesheet (একক কর্মীর বিস্তারিত টাইমশীট)</span>
               </button>
-            ) : (
-              <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
-                <select
-                  value={quickPrintEmployeeId}
-                  onChange={(e) => setQuickPrintEmployeeId(e.target.value)}
-                  className="p-2 text-xs border border-indigo-400/30 bg-indigo-950/80 text-white rounded-xl font-semibold flex-1 md:w-64"
-                >
-                  {accessibleEmployees.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.fullName} ({emp.designation} - {emp.workStation})
-                    </option>
-                  ))}
-                </select>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    const target = accessibleEmployees.find((e) => e.id === quickPrintEmployeeId) || currentUser;
-                    setSelectedMonthlyPrintEmp(target);
+              <button
+                type="button"
+                onClick={() => setDutyViewMode('master_summary')}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer ${
+                  dutyViewMode === 'master_summary'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>All-Staff Master Summary (সকল কর্মীর মাস্টার সামারি)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDutyViewMode('biometric_logs')}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer ${
+                  dutyViewMode === 'biometric_logs'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                <Fingerprint className="w-3.5 h-3.5" />
+                <span>Biometric Machine Log History (আমদানিকৃত বায়োমেট্রিক পাঞ্চ লগ)</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                  dutyViewMode === 'biometric_logs' ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-800'
+                }`}>
+                  {(attendance || []).filter((a) => a.date.startsWith(selectedMonth) && (a.clockInTime || a.locationNote?.includes('Biometric') || a.id.includes('BIO'))).length}
+                </span>
+              </button>
+            </div>
+
+            {/* Quick Staff Switcher for Individual View */}
+            {currentRole !== 'employee' && (
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500 font-medium">Select Staff:</span>
+                <select
+                  value={selectedViewEmployeeId}
+                  onChange={(e) => {
+                    setSelectedViewEmployeeId(e.target.value);
+                    setQuickPrintEmployeeId(e.target.value);
+                    setDutyViewMode('individual');
                   }}
-                  className="px-4 py-2 bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-md transition-all cursor-pointer whitespace-nowrap"
+                  className="py-1.5 px-3 text-xs border border-indigo-200 rounded-xl bg-indigo-50/50 text-indigo-950 font-bold focus:bg-white focus:ring-2 focus:ring-indigo-500 cursor-pointer max-w-[240px]"
                 >
-                  <Printer className="w-4 h-4" />
-                  <span>Print Staff Timesheet</span>
-                </button>
+                  {accessibleEmployees.map((emp) => {
+                    const punchCount = (attendance || []).filter(
+                      (a) => a.employeeId === emp.id && a.date.startsWith(selectedMonth)
+                    ).length;
+                    return (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.id} - {emp.fullName} {punchCount > 0 ? `(${punchCount} punches)` : ''}
+                      </option>
+                    );
+                  })}
+                </select>
               </div>
             )}
           </div>
@@ -838,61 +884,82 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
             </div>
           )}
 
-          {/* MAIN VIEW: If employee, show personal monthly duty docket; If HR/Manager, show All-Staff Master Summary Register */}
-          {currentRole === 'employee' ? (() => {
-            const myStats = getEmployeeMonthlyDays(currentUser, selectedMonth);
+          {/* VIEW 1: DETAILED INDIVIDUAL STAFF MONTHLY TIMESHEET */}
+          {dutyViewMode === 'individual' && (() => {
+            const targetEmployee = currentRole === 'employee' 
+              ? currentUser 
+              : accessibleEmployees.find((e) => e.id === selectedViewEmployeeId) || currentUser;
+            const staffStats = getEmployeeMonthlyDays(targetEmployee, selectedMonth);
+            const staffBiometricCount = (attendance || []).filter(
+              (a) => a.employeeId === targetEmployee.id && a.date.startsWith(selectedMonth)
+            ).length;
+
             return (
               <div className="no-print space-y-4">
                 {/* Employee Month Overview Card */}
                 <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-                    <div>
-                      <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                        <span>{currentUser.fullName}</span>
-                        <span className="font-mono text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md">
-                          ID: {currentUser.id}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="font-bold text-slate-900 text-base">
+                          {targetEmployee.fullName}
+                        </h3>
+                        <span className="font-mono text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-semibold">
+                          ID: {targetEmployee.id}
                         </span>
-                      </h3>
+                        {staffBiometricCount > 0 ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                            <Fingerprint className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>{staffBiometricCount} Biometric Punches Loaded</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600">
+                            Manual / Standard Roster
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-slate-500">
-                        {currentUser.designation} • {currentUser.workStation} • Period: <strong>{monthLabel}</strong>
+                        {targetEmployee.designation} • {targetEmployee.workStation} • Assigned Project: <strong>{targetEmployee.assignedProject || 'Street Children Shelter & Rescue Mission'}</strong> • Period: <strong>{monthLabel}</strong>
                       </p>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => setSelectedMonthlyPrintEmp(currentUser)}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer self-start sm:self-auto"
-                    >
-                      <Printer className="w-4 h-4" />
-                      <span>Print Monthly Timesheet (মাসিক)</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedMonthlyPrintEmp(targetEmployee)}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer self-start sm:self-auto"
+                      >
+                        <Printer className="w-4 h-4" />
+                        <span>Print Monthly Timesheet (মাসিক)</span>
+                      </button>
+                    </div>
                   </div>
 
                   {/* Monthly Summary Statistics Grid */}
                   <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-center text-xs">
                     <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200">
                       <span className="text-[10px] uppercase font-bold text-slate-500 block">Duty Scheduled</span>
-                      <span className="font-mono font-bold text-base text-slate-900">{myStats.scheduledDutyDays} d</span>
+                      <span className="font-mono font-bold text-base text-slate-900">{staffStats.scheduledDutyDays} d</span>
                     </div>
                     <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200">
                       <span className="text-[10px] uppercase font-bold text-emerald-700 block">Present Days</span>
-                      <span className="font-mono font-bold text-base text-emerald-800">{myStats.presentDays} d</span>
+                      <span className="font-mono font-bold text-base text-emerald-800">{staffStats.presentDays} d</span>
                     </div>
                     <div className="p-2.5 bg-teal-50 rounded-xl border border-teal-200">
                       <span className="text-[10px] uppercase font-bold text-teal-700 block">Govt Holidays</span>
-                      <span className="font-mono font-bold text-base text-teal-800">{myStats.govtHolidayDays} d</span>
+                      <span className="font-mono font-bold text-base text-teal-800">{staffStats.govtHolidayDays} d</span>
                     </div>
                     <div className="p-2.5 bg-indigo-50 rounded-xl border border-indigo-200">
                       <span className="text-[10px] uppercase font-bold text-indigo-700 block">Total Worked</span>
-                      <span className="font-mono font-black text-base text-indigo-800">{formatHours(myStats.totalWorkedHours)}</span>
+                      <span className="font-mono font-black text-base text-indigo-800">{formatHours(staffStats.totalWorkedHours)}</span>
                     </div>
                     <div className="p-2.5 bg-amber-50 rounded-xl border border-amber-200">
                       <span className="text-[10px] uppercase font-bold text-amber-700 block">Approved Leave</span>
-                      <span className="font-mono font-bold text-base text-amber-800">{myStats.leaveDays} d</span>
+                      <span className="font-mono font-bold text-base text-amber-800">{staffStats.leaveDays} d</span>
                     </div>
                     <div className="p-2.5 bg-rose-50 rounded-xl border border-rose-200">
                       <span className="text-[10px] uppercase font-bold text-rose-700 block">Absent Days</span>
-                      <span className="font-mono font-bold text-base text-rose-800">{myStats.absentDays} d</span>
+                      <span className="font-mono font-bold text-base text-rose-800">{staffStats.absentDays} d</span>
                     </div>
                   </div>
 
@@ -911,14 +978,30 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {myStats.days.map((day) => (
+                        {staffStats.days.map((day) => (
                           <tr key={day.dateStr} className={`hover:bg-slate-50/80 ${day.isHoliday ? 'bg-teal-50/30' : day.isAbsent ? 'bg-rose-50/30' : day.isLate ? 'bg-amber-50/30' : ''}`}>
                             <td className="p-2.5 text-center font-mono font-semibold text-slate-500">{day.dayNumber}</td>
                             <td className="p-2.5 font-medium text-slate-800 font-mono">
                               {day.dateStr} <span className="text-slate-400 font-sans">({day.dayOfWeek})</span>
                             </td>
-                            <td className="p-2.5 font-mono text-slate-700">{day.clockInTime || '--'}</td>
-                            <td className="p-2.5 font-mono text-slate-700">{day.clockOutTime || '--'}</td>
+                            <td className="p-2.5 font-mono text-slate-700">
+                              {day.clockInTime ? (
+                                <span className="inline-flex items-center gap-1 font-semibold text-slate-900">
+                                  <Fingerprint className="w-3 h-3 text-indigo-600" />
+                                  <span>{day.clockInTime}</span>
+                                </span>
+                              ) : '--'}
+                            </td>
+                            <td className="p-2.5 font-mono text-slate-700">
+                              {day.clockOutTime ? (
+                                <span className="inline-flex items-center gap-1 font-semibold text-slate-900">
+                                  <span>{day.clockOutTime}</span>
+                                  {day.clockOutTime === '19:00:00' && (
+                                    <span className="text-[10px] text-amber-600 font-sans font-normal" title="Automatic checkout at 07:00 PM after midnight">(Auto)</span>
+                                  )}
+                                </span>
+                              ) : '--'}
+                            </td>
                             <td className="p-2.5 text-center font-mono font-bold text-indigo-700">
                               {day.hoursLogged > 0 ? formatHours(day.hoursLogged) : '--'}
                             </td>
@@ -943,8 +1026,10 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                 </div>
               </div>
             );
-          })() : (() => {
-            // HR Admin & Line Manager view: Staff Master Timesheet Summary Register
+          })()}
+
+          {/* VIEW 2: ALL-STAFF MASTER TIMESHEET SUMMARY REGISTER */}
+          {dutyViewMode === 'master_summary' && (() => {
             const baseStaff = currentRole === 'line_manager'
               ? employees.filter((e) => (subordinateIds.has(e.id) || e.id === currentUser.id) && (includeInactiveStaff ? true : isEmployeeActive(e)))
               : employees.filter((e) => (includeInactiveStaff ? true : isEmployeeActive(e)));
@@ -1027,13 +1112,32 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                       <tbody className="divide-y divide-slate-100">
                         {filteredStaff.map((emp) => {
                           const stats = getStaffMonthlySummary(emp);
+                          const punchCount = (attendance || []).filter(
+                            (a) => a.employeeId === emp.id && a.date.startsWith(selectedMonth)
+                          ).length;
+
                           return (
-                            <tr key={emp.id} className="hover:bg-slate-50/70 transition-colors">
+                            <tr 
+                              key={emp.id} 
+                              onClick={() => {
+                                setSelectedViewEmployeeId(emp.id);
+                                setDutyViewMode('individual');
+                              }}
+                              className="hover:bg-indigo-50/40 transition-colors cursor-pointer"
+                            >
                               <td className="p-3 text-center font-mono font-bold text-slate-700 border-r border-slate-100">
                                 {emp.id}
                               </td>
                               <td className="p-3 border-r border-slate-100">
-                                <span className="font-bold text-slate-900 block">{emp.fullName}</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-bold text-slate-900 block">{emp.fullName}</span>
+                                  {punchCount > 0 && (
+                                    <span className="inline-flex items-center text-[10px] px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-700 font-bold border border-emerald-200" title={`${punchCount} biometric machine logs imported`}>
+                                      <Fingerprint className="w-3 h-3 text-emerald-600 inline mr-0.5" />
+                                      {punchCount}p
+                                    </span>
+                                  )}
+                                </div>
                                 <span className="text-[11px] text-slate-500">{emp.designation}</span>
                               </td>
                               <td className="p-3 border-r border-slate-100 text-slate-600 font-medium">
@@ -1065,16 +1169,31 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                                   100% Compliant
                                 </span>
                               </td>
-                              <td className="p-3 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedMonthlyPrintEmp(emp)}
-                                  className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 cursor-pointer inline-flex items-center gap-1 shadow-2xs transition-colors"
-                                  title="Print full monthly timesheet for this staff member"
-                                >
-                                  <Printer className="w-3.5 h-3.5" />
-                                  <span>Print</span>
-                                </button>
+                              <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedViewEmployeeId(emp.id);
+                                      setDutyViewMode('individual');
+                                    }}
+                                    className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-lg border border-indigo-200 cursor-pointer inline-flex items-center gap-1 shadow-2xs transition-colors"
+                                    title="View full monthly timesheet for this staff member"
+                                  >
+                                    <CalendarCheck2 className="w-3 h-3" />
+                                    <span>View</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedMonthlyPrintEmp(emp)}
+                                    className="px-2.5 py-1 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-lg border border-slate-200 cursor-pointer inline-flex items-center gap-1 shadow-2xs transition-colors"
+                                    title="Print certified monthly timesheet"
+                                  >
+                                    <Printer className="w-3 h-3" />
+                                    <span>Print</span>
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           );
@@ -1083,6 +1202,125 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                     </table>
                   </div>
                 </div>
+              </div>
+            );
+          })()}
+
+          {/* VIEW 3: BIOMETRIC MACHINE LOG HISTORY */}
+          {dutyViewMode === 'biometric_logs' && (() => {
+            const biometricLogs = (attendance || [])
+              .filter((a) => a.date.startsWith(selectedMonth) && (a.clockInTime || a.locationNote?.includes('Biometric') || a.id.includes('BIO')))
+              .sort((a, b) => b.date.localeCompare(a.date));
+
+            return (
+              <div className="no-print space-y-4">
+                <div className="bg-gradient-to-r from-emerald-900 to-slate-900 p-4 sm:p-5 rounded-2xl text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                      <Fingerprint className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-sm sm:text-base text-white">
+                        Biometric Fingerprint Machine Punch Records ({biometricLogs.length} Records)
+                      </h3>
+                      <p className="text-xs text-emerald-200 mt-0.5">
+                        অফিসিয়াল বায়োমেট্রিক পাঞ্চ মেশিন থেকে আমদানিকৃত সকল কর্মীর উপস্থিতি ও ডিউটি লগ রেজিস্টার ({monthLabel})
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono bg-white/10 px-3 py-1 rounded-xl border border-white/20">
+                      Total Punches: <strong>{biometricLogs.length}</strong>
+                    </span>
+                  </div>
+                </div>
+
+                {biometricLogs.length === 0 ? (
+                  <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center space-y-3">
+                    <Fingerprint className="w-10 h-10 text-slate-300 mx-auto" />
+                    <p className="font-bold text-slate-700 text-sm">
+                      No Biometric Logs Found for {monthLabel}
+                    </p>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto">
+                      বায়োমেট্রিক মেশিন থেকে লগ কপি করে পেস্ট করতে 'Attendance' মডিউলে গিয়ে 'Import Biometric Machine Logs' অপশন ব্যবহার করুন।
+                    </p>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs text-left">
+                        <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                          <tr>
+                            <th className="p-3 text-center w-12">#</th>
+                            <th className="p-3 border-r border-slate-200">Staff ID & Name</th>
+                            <th className="p-3 border-r border-slate-200">Date</th>
+                            <th className="p-3 border-r border-slate-200">In Time</th>
+                            <th className="p-3 border-r border-slate-200">Out Time</th>
+                            <th className="p-3 text-center border-r border-slate-200">Hours</th>
+                            <th className="p-3 text-center border-r border-slate-200">Shift Status</th>
+                            <th className="p-3 border-r border-slate-200">Duty Location</th>
+                            <th className="p-3 text-center">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {biometricLogs.map((log, index) => {
+                            const emp = employees.find((e) => e.id === log.employeeId);
+                            return (
+                              <tr key={log.id || index} className="hover:bg-slate-50 transition-colors">
+                                <td className="p-3 text-center font-mono text-slate-400">{index + 1}</td>
+                                <td className="p-3 border-r border-slate-100">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-mono font-bold text-indigo-700">{log.employeeId}</span>
+                                    <span className="font-semibold text-slate-900">{log.employeeName || emp?.fullName}</span>
+                                  </div>
+                                  <span className="text-[11px] text-slate-500">{emp?.designation || 'Staff'}</span>
+                                </td>
+                                <td className="p-3 font-mono font-medium text-slate-800 border-r border-slate-100">
+                                  {log.date}
+                                </td>
+                                <td className="p-3 font-mono font-semibold text-emerald-700 border-r border-slate-100">
+                                  {log.clockInTime || '--'}
+                                </td>
+                                <td className="p-3 font-mono font-semibold text-indigo-700 border-r border-slate-100">
+                                  {log.clockOutTime || '--'}
+                                </td>
+                                <td className="p-3 text-center font-mono font-bold text-indigo-800 border-r border-slate-100">
+                                  {log.hoursWorked ? formatHours(log.hoursWorked) : '--'}
+                                </td>
+                                <td className="p-3 text-center border-r border-slate-100">
+                                  <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    log.status === 'Late'
+                                      ? 'bg-amber-100 text-amber-800'
+                                      : 'bg-emerald-100 text-emerald-800'
+                                  }`}>
+                                    {log.status === 'Late' ? 'Late Arrival' : 'Present'}
+                                  </span>
+                                </td>
+                                <td className="p-3 text-slate-600 text-[11px] border-r border-slate-100">
+                                  {log.locationNote || log.punchLocationName || emp?.workStation || 'Head Office'}
+                                </td>
+                                <td className="p-3 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedViewEmployeeId(log.employeeId);
+                                      setDutyViewMode('individual');
+                                    }}
+                                    className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-lg border border-indigo-200 cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+                                  >
+                                    <CalendarCheck2 className="w-3 h-3" />
+                                    <span>Timesheet</span>
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })()}
