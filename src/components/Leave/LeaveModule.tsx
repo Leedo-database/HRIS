@@ -54,6 +54,7 @@ export const LeaveModule: React.FC<LeaveModuleProps> = ({
   const [activeSubTab, setActiveSubTab] = useState<'applications' | 'holidays'>('applications');
   const [isApplying, setIsApplying] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('All');
+  const [printedLeave, setPrintedLeave] = useState<LeaveRequest | null>(null);
   
   // Application form state
   const [leaveType, setLeaveType] = useState<LeaveType>('Annual/Casual');
@@ -133,14 +134,15 @@ export const LeaveModule: React.FC<LeaveModuleProps> = ({
     alert(`Leave application submitted. Handover request sent to ${colleagueName}. Once they accept, it will automatically go to HR for approval.`);
   };
 
-  // Handover colleague accepts
+  // Handover colleague accepts with formal recommendation and signature
   const handleAcceptHandover = (req: LeaveRequest) => {
+    const todayStr = new Date().toISOString().split('T')[0];
     onUpdateLeave({
       ...req,
       handoverStatus: 'Accepted',
       status: 'Pending HR Approval',
-      handoverComment: `Duty handover accepted by ${currentUser.fullName} on ${new Date().toISOString().split('T')[0]}`,
-      approverRemarks: `Handover accepted by ${currentUser.fullName}. Ready for Line Manager / HR final approval.`,
+      handoverComment: `Duty handover accepted and recommended for approval by ${currentUser.fullName} (${currentUser.designation}) on ${todayStr}`,
+      approverRemarks: `Handover accepted & recommended by ${currentUser.fullName}. Ready for Supervisor / HR final approval.`,
     });
   };
 
@@ -653,7 +655,10 @@ export const LeaveModule: React.FC<LeaveModuleProps> = ({
                     <div className="flex items-center justify-end gap-1.5">
                       <button
                         type="button"
-                        onClick={() => onPrintLeaveForm(l)}
+                        onClick={() => {
+                          setPrintedLeave(l);
+                          onPrintLeaveForm(l);
+                        }}
                         className="p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                         title="Print Formal Leave Voucher"
                       >
@@ -700,6 +705,115 @@ export const LeaveModule: React.FC<LeaveModuleProps> = ({
         </div>
       </div>
       </>
+      )}
+
+      {/* Official Leave Application & Handover Printable Modal */}
+      {printedLeave && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-2xl w-full border border-slate-200 shadow-2xl p-6 space-y-5 my-8">
+            <div className="no-print flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2 text-indigo-900 font-bold text-sm">
+                <FileText className="w-4 h-4 text-indigo-600" />
+                <span>LEEDO Official Leave Application Voucher (ছুটির আবেদন ও দায়িত্ব হস্তান্তর ফরম)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Print Form</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPrintedLeave(null)}
+                  className="px-2.5 py-1.5 text-slate-400 hover:text-slate-600 rounded-lg text-sm font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Printable Form Container */}
+            <div id="printable-leave-voucher" className="p-6 bg-white border border-slate-300 rounded-2xl text-xs text-slate-800 space-y-4">
+              <div className="text-center border-b border-slate-200 pb-4">
+                <h1 className="text-lg font-black tracking-tight text-slate-900 uppercase">
+                  LEEDO - Local Education & Economic Development Organization
+                </h1>
+                <p className="text-[11px] text-slate-500">
+                  Head Office: 23/1/A, Tollabag, Sobhanbag, Dhanmondi, Dhaka-1207 • Web: leedobd.org
+                </p>
+                <h2 className="text-xs font-bold uppercase tracking-widest text-indigo-900 mt-2 underline decoration-2 underline-offset-4">
+                  OFFICIAL LEAVE APPLICATION & HANDOVER FORM (ফরম এইচআর-০৪)
+                </h2>
+              </div>
+
+              {/* Applicant Info */}
+              <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <div>
+                  <p><strong>Employee Name:</strong> {printedLeave.employeeName}</p>
+                  <p><strong>Employee ID:</strong> {printedLeave.employeeId}</p>
+                  <p><strong>Department:</strong> {printedLeave.department}</p>
+                </div>
+                <div>
+                  <p><strong>Application ID:</strong> {printedLeave.id}</p>
+                  <p><strong>Applied Date:</strong> {printedLeave.appliedDate}</p>
+                  <p><strong>Status:</strong> <span className="font-bold text-indigo-900">{printedLeave.status}</span></p>
+                </div>
+              </div>
+
+              {/* Leave Particulars */}
+              <div className="border border-slate-200 rounded-xl p-3 space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <p><strong>Leave Category:</strong> {printedLeave.leaveType}</p>
+                  <p><strong>Duration:</strong> {printedLeave.startDate} to {printedLeave.endDate} ({printedLeave.daysCount} Days)</p>
+                </div>
+                <p><strong>Reason for Leave:</strong> {printedLeave.reason}</p>
+              </div>
+
+              {/* Duty Handover Colleague Acceptance & Recommendation */}
+              <div className="border-2 border-emerald-300 bg-emerald-50/50 rounded-xl p-3.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-emerald-950 text-xs">
+                    Duty Handover Colleague Endorsement & Recommendation (দায়িত্ব গ্রহণকারীর সুপারিশ):
+                  </span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                    printedLeave.handoverStatus === 'Accepted'
+                      ? 'bg-emerald-600 text-white'
+                      : printedLeave.handoverStatus === 'Declined'
+                      ? 'bg-rose-600 text-white'
+                      : 'bg-amber-500 text-slate-900'
+                  }`}>
+                    {printedLeave.handoverStatus === 'Accepted' ? '✓ Handover Accepted & Recommended' : printedLeave.handoverStatus === 'Declined' ? 'Declined' : 'Pending Acceptance'}
+                  </span>
+                </div>
+                <p className="text-slate-700 text-[11px]">
+                  <strong>Handover Colleague:</strong> {printedLeave.handoverPersonName || 'Designated Colleague'}
+                </p>
+                <p className="text-slate-600 text-[11px] italic">
+                  "{printedLeave.handoverComment || 'I hereby confirm duty handover acceptance and recommend this leave.'}"
+                </p>
+              </div>
+
+              {/* Signatures */}
+              <div className="pt-8 grid grid-cols-3 gap-4 text-center text-[10px] text-slate-700">
+                <div className="border-t border-slate-400 pt-1.5">
+                  <p className="font-bold text-slate-900">{printedLeave.employeeName}</p>
+                  <p className="text-slate-500">Applicant Signature</p>
+                </div>
+                <div className="border-t border-slate-400 pt-1.5">
+                  <p className="font-bold text-slate-900">{printedLeave.handoverPersonName || 'Handover Colleague'}</p>
+                  <p className="text-slate-500">Handover Colleague Signature</p>
+                </div>
+                <div className="border-t border-slate-400 pt-1.5">
+                  <p className="font-bold text-slate-900">{printedLeave.approvedBy || 'Manager HR / ED'}</p>
+                  <p className="text-slate-500">Approving Authority Signature</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

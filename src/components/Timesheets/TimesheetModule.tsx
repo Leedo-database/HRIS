@@ -8,7 +8,8 @@ import {
   LEEDO_JOB_LOCATIONS,
   GovernmentHoliday,
   AttendanceRecord,
-  LeaveRequest
+  LeaveRequest,
+  VisitAuthorization
 } from '../../types/hris';
 import { OFFICIAL_BANGLADESH_HOLIDAYS_2026 } from '../../data/bangladeshHolidays';
 import { getHolidayOnDate, isEmployeeActive, calculateDailyHours, formatHours } from '../../utils/calculations';
@@ -52,6 +53,7 @@ interface TimesheetModuleProps {
   holidays?: GovernmentHoliday[];
   attendance?: AttendanceRecord[];
   leaves?: LeaveRequest[];
+  visits?: VisitAuthorization[];
   onAddTimesheet: (entry: TimesheetEntry) => void;
   onUpdateTimesheet: (entry: TimesheetEntry) => void;
 }
@@ -78,6 +80,7 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
   holidays = OFFICIAL_BANGLADESH_HOLIDAYS_2026,
   attendance = [],
   leaves = [],
+  visits = [],
   onAddTimesheet,
   onUpdateTimesheet,
 }) => {
@@ -327,25 +330,17 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
       let clockInTime: string | undefined;
       let clockOutTime: string | undefined;
 
+      // Check for approved official field visit authorization on this date
+      const visitMatch = (visits || []).find(
+        (v) => v.employeeId === emp.id && v.status === 'Approved' && dateStr >= v.startDate && dateStr <= v.endDate
+      );
+
       // 1. Check Attendance Record FIRST (Biometric Machine punch or Web Clock-In)
       const attMatch = empAttRecords.find((a) => a.date === dateStr);
 
       if (attMatch && (attMatch.clockInTime || attMatch.hoursWorked || attMatch.status === 'Present' || attMatch.status === 'Late')) {
         clockInTime = attMatch.clockInTime;
         clockOutTime = attMatch.clockOutTime;
-
-        // Midnight Auto-Checkout Rule:
-        // "jodi kew check out dite vule jay thole se rat 12 tar por auto check out hoye jabe and ta check out time 07 ta dora hobe"
-        if (clockInTime && (!clockOutTime || clockOutTime.trim() === '')) {
-          if (dateStr < todayStr) {
-            const inH = parseInt(clockInTime.split(':')[0], 10) || 10;
-            if (inH < 19) {
-              clockOutTime = '19:00:00';
-            } else {
-              clockOutTime = '06:00:00';
-            }
-          }
-        }
 
         if (clockInTime && clockOutTime) {
           hoursLogged = Math.round(calculateDailyHours(clockInTime, clockOutTime) * 10) / 10;
@@ -365,19 +360,22 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
           const [inH, inM] = (attMatch.clockInTime || '10:35').split(':').map(Number);
           lateMinutes = Math.max(1, ((inH || 10) * 60 + (inM || 0)) - (10 * 60));
           status = 'Late Arrival (বিলম্ব)';
-          notes = `Late In: ${clockInTime} (+${lateMinutes}m late) • Shift: ${emp.shiftStartTime || '10:00'}-${emp.shiftEndTime || '18:00'}${clockOutTime === '19:00:00' && !attMatch.clockOutTime ? ' (রাত ১২টার পর অটো-চেকআউট সন্ধ্যা ০৭:০০)' : ''}`;
+          notes = `Late In: ${clockInTime} (+${lateMinutes}m late) • Shift: ${emp.shiftStartTime || '10:00'}-${emp.shiftEndTime || '18:00'}`;
         } else {
           presentDays++;
           totalWorkedHours = Math.round((totalWorkedHours + hoursLogged) * 10) / 10;
           if (hol) {
             status = 'Govt Holiday Duty (সরকারি ছুটির দিনে ডিউটি)';
             notes = `Special Duty on Gazetted Public Holiday: ${hol.titleBangla || hol.title} (${clockInTime || '10:00'} - ${clockOutTime || '18:00'})`;
+          } else if (visitMatch) {
+            status = 'Official Field Visit (মাঠ পরিদর্শন)';
+            notes = `Approved Field Visit: ${visitMatch.destination || visitMatch.purpose} (${visitMatch.assignedProject || 'LEEDO'})`;
           } else if (!isScheduledDuty) {
             status = 'Weekend Duty (সাপ্তাহিক ছুটিতে ডিউটি)';
             notes = `Extra Duty Performed on Roster Off-Day (${clockInTime || '10:00'} - ${clockOutTime || '18:00'})`;
           } else {
             status = 'Present / Duty Performed';
-            notes = `${emp.assignedProject || 'Street Children Shelter & Community Hub'} (${clockInTime || emp.shiftStartTime || '10:00'} - ${clockOutTime || emp.shiftEndTime || '18:00'})${clockOutTime === '19:00:00' && !attMatch.clockOutTime ? ' (রাত ১২টার পর অটো-চেকআউট সন্ধ্যা ০৭:০০)' : ''}`;
+            notes = `${emp.assignedProject || 'Street Children Shelter & Community Hub'} (${clockInTime || emp.shiftStartTime || '10:00'} - ${clockOutTime || emp.shiftEndTime || '18:00'})`;
           }
         }
       } else if (attMatch && attMatch.status === 'Absent') {
@@ -386,6 +384,13 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
         hoursLogged = 0;
         absentDays++;
         notes = 'Unapproved absence / No punch recorded';
+      } else if (visitMatch) {
+        // Approved Field Visit without separate biometric punch (Duty Credited)
+        presentDays++;
+        hoursLogged = dailyHours;
+        totalWorkedHours = Math.round((totalWorkedHours + dailyHours) * 10) / 10;
+        status = 'Official Field Visit (অনুমোদিত ফিল্ড ভিজিট)';
+        notes = `Official Field Visit: ${visitMatch.destination || visitMatch.purpose} • Project: ${visitMatch.assignedProject || 'LEEDO'} (Full duty credited)`;
       } else if (hol) {
         // 2. Official Bangladesh Government Holiday (Paid Day Off)
         isHoliday = true;
@@ -485,11 +490,16 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
       .map((e) => e.id)
   );
 
-  // Accessible staff based on role (Employee sees only self; Supervisor sees team; HR sees all) - strictly active employees
-  const accessibleEmployees = currentRole === 'employee'
+  // Permission check: Only HR Admin, Forhad Hossain (1001), and Murshida Akhter Kanta (1002) / Senior HR Directors can view master summary, biometric log history, and other staff timesheets
+  const canViewMasterTimesheet = 
+    currentRole === 'hr_admin' || 
+    currentUser.id === '1001' || 
+    currentUser.id === '1002' ||
+    (currentUser.designation && /hr|director|executive/i.test(currentUser.designation));
+
+  // Accessible staff based on role & user permissions
+  const accessibleEmployees = !canViewMasterTimesheet
     ? [currentUser]
-    : currentRole === 'line_manager'
-    ? employees.filter((e) => (e.id === currentUser.id || subordinateIds.has(e.id)) && isEmployeeActive(e))
     : employees.filter(isEmployeeActive);
 
   // All Late and Absent incidents for accessible staff for the selected month
@@ -697,8 +707,8 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
             <option value="2026-09">September 2026 (Archived)</option>
           </select>
 
-          {/* HR Master Summary Print Button (Accessible to HR and Managers) */}
-          {currentRole !== 'employee' && (
+          {/* HR Master Summary Print Button (Accessible to HR Admin, 1001, 1002) */}
+          {canViewMasterTimesheet && (
             <button
               onClick={() => setIsMasterSummaryPrintModalOpen(true)}
               className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
@@ -751,56 +761,56 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
 
       {activeTimesheetSubTab === 'duty_timesheet' ? (
         <>
-          {/* Duty Timesheet Sub-Navigation: Individual Timesheet vs All-Staff Master vs Biometric Log History */}
-          <div className="no-print bg-white p-3 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setDutyViewMode('individual')}
-                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer ${
-                  dutyViewMode === 'individual'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                <CalendarCheck2 className="w-3.5 h-3.5" />
-                <span>Detailed Staff Timesheet (একক কর্মীর বিস্তারিত টাইমশীট)</span>
-              </button>
+          {/* Duty Timesheet Sub-Navigation: Individual Timesheet vs All-Staff Master vs Biometric Log History (Restricted to HR Admin, Forhad Hossain 1001, Murshida Akhter Kanta 1002) */}
+          {canViewMasterTimesheet ? (
+            <div className="no-print bg-white p-3 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDutyViewMode('individual')}
+                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer ${
+                    dutyViewMode === 'individual'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <CalendarCheck2 className="w-3.5 h-3.5" />
+                  <span>Detailed Staff Timesheet (একক কর্মীর বিস্তারিত টাইমশীট)</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => setDutyViewMode('master_summary')}
-                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer ${
-                  dutyViewMode === 'master_summary'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                <Users className="w-3.5 h-3.5" />
-                <span>All-Staff Master Summary (সকল কর্মীর মাস্টার সামারি)</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setDutyViewMode('master_summary')}
+                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer ${
+                    dutyViewMode === 'master_summary'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>All-Staff Master Summary (সকল কর্মীর মাস্টার সামারি)</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => setDutyViewMode('biometric_logs')}
-                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer ${
-                  dutyViewMode === 'biometric_logs'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                <Fingerprint className="w-3.5 h-3.5" />
-                <span>Biometric Machine Log History (আমদানিকৃত বায়োমেট্রিক পাঞ্চ লগ)</span>
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                  dutyViewMode === 'biometric_logs' ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-800'
-                }`}>
-                  {(attendance || []).filter((a) => a.date.startsWith(selectedMonth) && (a.clockInTime || a.locationNote?.includes('Biometric') || a.id.includes('BIO'))).length}
-                </span>
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onClick={() => setDutyViewMode('biometric_logs')}
+                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer ${
+                    dutyViewMode === 'biometric_logs'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <Fingerprint className="w-3.5 h-3.5" />
+                  <span>Biometric Machine Log History (আমদানিকৃত বায়োমেট্রিক পাঞ্চ লগ)</span>
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                    dutyViewMode === 'biometric_logs' ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-800'
+                  }`}>
+                    {(attendance || []).filter((a) => a.date.startsWith(selectedMonth) && (a.clockInTime || a.locationNote?.includes('Biometric') || a.id.includes('BIO'))).length}
+                  </span>
+                </button>
+              </div>
 
-            {/* Quick Staff Switcher for Individual View */}
-            {currentRole !== 'employee' && (
+              {/* Quick Staff Switcher for Individual View */}
               <div className="flex items-center gap-2">
                 <span className="text-slate-500 font-medium">Select Staff:</span>
                 <select
@@ -824,8 +834,18 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                   })}
                 </select>
               </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="no-print bg-indigo-50/60 p-3 rounded-2xl border border-indigo-100 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2 font-bold text-indigo-900">
+                <CalendarCheck2 className="w-4 h-4 text-indigo-600" />
+                <span>My Timesheet (আমার ব্যক্তিগত টাইমশীট) — {currentUser.fullName} ({currentUser.id})</span>
+              </div>
+              <span className="text-[11px] font-mono text-indigo-700 bg-white px-2.5 py-1 rounded-lg border border-indigo-200">
+                {selectedMonth}
+              </span>
+            </div>
+          )}
 
           {/* Pending HR Corrections Review Banner (Visible to HR Admin) */}
           {currentRole === 'hr_admin' && allPendingCorrections.length > 0 && (

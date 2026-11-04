@@ -46,11 +46,16 @@ export interface ParsedAttendanceRow {
 }
 
 // Known Enroll No. mapping for LEEDO staff based on the official biometric machine config
+// Known Enroll No. mapping for LEEDO staff based on the official biometric machine config
 const KNOWN_ENROLL_MAP: Record<string, string> = {
   '2': '1002', // Murshida Akhter Kanta
   '3': '1004', // Md. Habibur Rahman
   '4': '1005', // Md. Belal Hossain
   '10': '1010', // Rayhan
+  '13': '1013', // Md. Sohel Rana (Peace Home)
+  '14': '1014', // Tania Akter (Peace Home)
+  '15': '1015', // Parvin Akter / Pervin (Peace Home)
+  '16': '1016', // Vulu Rani Mollik / Bulu (Peace Home)
   '19': '1019', // Farhana
   '25': '1025', // A.K.M. Mizanur Rahman
   '27': '1027', // Fabiha Mustari
@@ -82,21 +87,44 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
     const cleanNo = String(rawNo || '').trim();
     const cleanName = String(rawName || '').trim().toLowerCase();
 
-    // 1. By Employee ID exact match (e.g. 1002, 1004, 1057, 1067, 1075, 1079, 1089, 1090, 1100)
+    // Ignore department/header words from being treated as employee name
+    if (['peace home', 'peacehome', 'peace', 'office', 'headoffice', 'station', 'shelter'].includes(cleanName)) {
+      return undefined;
+    }
+
+    // 1. Explicit Peace Home & Staff Nickname / Variant Name Direct Mapping
+    if (cleanName.includes('sohel') || cleanName.includes('rana') || cleanName.includes('সোহেল')) {
+      const match = employees.find((e) => e.id === '1013');
+      if (match) return match;
+    }
+    if (cleanName.includes('tania') || cleanName.includes('তানিয়া') || cleanName.includes('তানিয়া')) {
+      const match = employees.find((e) => e.id === '1014');
+      if (match) return match;
+    }
+    if (cleanName.includes('parvin') || cleanName.includes('pervin') || cleanName.includes('পারভিন') || cleanName.includes('পারভীন')) {
+      const match = employees.find((e) => e.id === '1015');
+      if (match) return match;
+    }
+    if (cleanName.includes('vulu') || cleanName.includes('bulu') || cleanName.includes('ভুলু') || cleanName.includes('বুলু') || cleanName.includes('mollik') || cleanName.includes('মল্লিক')) {
+      const match = employees.find((e) => e.id === '1016');
+      if (match) return match;
+    }
+
+    // 2. By Employee ID exact match (e.g. 1002, 1004, 1013, 1014, 1015, 1016, 1057, 1067, 1075, 1079, 1089, 1090, 1100)
     if (cleanNo) {
       const matchById = employees.find((e) => e.id === cleanNo || e.id === `10${cleanNo.padStart(2, '0')}`);
       if (matchById) return matchById;
     }
 
-    // 2. By known Enroll No. mapping (for legacy 1-2 digit enroll numbers)
+    // 3. By known Enroll No. mapping (for legacy 1-2 digit enroll numbers)
     if (cleanNo && KNOWN_ENROLL_MAP[cleanNo]) {
       const targetId = KNOWN_ENROLL_MAP[cleanNo];
       const match = employees.find((e) => e.id === targetId);
       if (match) return match;
     }
 
-    // 3. By Name substring / fuzzy matching
-    if (cleanName) {
+    // 4. By Name substring / fuzzy matching
+    if (cleanName && cleanName.length >= 3) {
       const matchName = employees.find((e) => {
         const full = e.fullName.toLowerCase();
         if (full.includes(cleanName) || cleanName.includes(full)) return true;

@@ -838,7 +838,86 @@ export const OfficialLettersModule: React.FC<OfficialLettersModuleProps> = ({
               </div>
             )}
 
-            {/* ================= 6. EXIT CLEARANCE & SETTLEMENT ================= */}
+            {/* ================= 6. FORMAL LEAVE APPLICATION & HANDOVER FORM ================= */}
+            {selectedType === 'leave_application' && (
+              <div className="space-y-4">
+                <h2 className="text-center text-base font-bold uppercase tracking-wider underline text-slate-900">
+                  FORMAL LEAVE REQUISITION & DUTY HANDOVER FORM
+                </h2>
+                <p className="text-center text-xs text-slate-500 font-medium">
+                  LEEDO Human Resources Management • Leave Form HR-04
+                </p>
+
+                {/* Applicant Summary */}
+                <div className="grid grid-cols-2 gap-3 text-xs border border-slate-300 rounded-xl p-4 bg-slate-50">
+                  <div>
+                    <p><strong>Employee Name:</strong> {emp?.fullName}</p>
+                    <p><strong>Staff ID:</strong> {emp?.id}</p>
+                    <p><strong>Designation:</strong> {emp?.designation}</p>
+                    <p><strong>Department:</strong> {emp?.department}</p>
+                  </div>
+                  <div>
+                    <p><strong>Work Station:</strong> {emp?.workStation || 'Head Office'}</p>
+                    <p><strong>Project:</strong> {emp?.assignedProject || 'Child Protection & Street Hub'}</p>
+                    <p><strong>Phone:</strong> {emp?.phone}</p>
+                    <p><strong>Application Date:</strong> {issueDate}</p>
+                  </div>
+                </div>
+
+                {/* Leave Specifics Table */}
+                <div className="border border-slate-300 rounded-xl overflow-hidden my-3 text-xs">
+                  <table className="w-full text-left">
+                    <thead className="bg-slate-100 font-bold text-slate-800 border-b border-slate-300">
+                      <tr>
+                        <th className="p-2.5 w-1/3">Leave Particulars</th>
+                        <th className="p-2.5">Application Details & Verification</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      <tr>
+                        <td className="p-2.5 font-bold">Leave Nature / Category</td>
+                        <td className="p-2.5">Annual / Casual Leave (নৈমিত্তিক বা বার্ষিক ছুটি)</td>
+                      </tr>
+                      <tr>
+                        <td className="p-2.5 font-bold">Leave Duration Requested</td>
+                        <td className="p-2.5 font-semibold text-indigo-900">
+                          {issueDate} to {new Date(new Date(issueDate).getTime() + 2 * 86400000).toISOString().split('T')[0]} (3 Calendar Days)
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="p-2.5 font-bold">Reason for Leave</td>
+                        <td className="p-2.5 italic">
+                          Personal family urgency / Rest and health recuperation per organization leave policy.
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="p-2.5 font-bold">Emergency Station Contact Address</td>
+                        <td className="p-2.5">{emp?.presentAddress || 'Permanent Address on Record'} • Contact: {emp?.emergencyContact?.phone || emp?.phone}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Duty Handover & Recommendation Section */}
+                <div className="p-4 bg-emerald-50/60 rounded-xl border border-emerald-200 text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-emerald-900 text-xs">Duty Handover Acceptance & Recommendation (দায়িত্ব হস্তান্তর ও সুপারিশ):</span>
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-600 text-white font-bold text-[10px]">
+                      ✓ Handover Accepted & Recommended
+                    </span>
+                  </div>
+                  <p className="text-slate-700 text-justify">
+                    I hereby confirm that I have taken over all operational files, station responsibilities, and emergency child safety duties of <strong>{emp?.fullName}</strong> for the requested leave period. I recommend this leave application for approval.
+                  </p>
+                  <div className="pt-2 flex justify-between items-center text-[11px] font-semibold text-slate-700">
+                    <span>Designated Colleague: Designated Department Officer</span>
+                    <span>Status: Accepted with Positive Recommendation</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ================= 7. EXIT CLEARANCE & SETTLEMENT ================= */}
             {(selectedType === 'separation_clearance' || selectedType === 'final_settlement') && (
               <div className="space-y-4">
                 <h2 className="text-center text-base font-bold uppercase tracking-wider underline text-slate-900">

@@ -70,7 +70,10 @@ import {
   subscribeHolidaysFromCloud,
   saveHolidayToCloud,
   deleteHolidayFromCloud,
-  testFirestoreConnection
+  testFirestoreConnection,
+  fetchCredentialsFromCloud,
+  subscribeCredentialsFromCloud,
+  saveCredentialToCloud
 } from './utils/firebaseSync';
 
 import { Header } from './components/Header';
@@ -139,9 +142,12 @@ export default function App() {
   const [appraisals, setAppraisals] = useState<PerformanceAppraisal[]>(() =>
     loadFromStorage(STORAGE_KEYS.APPRAISALS, INITIAL_APPRAISALS)
   );
-  const [expenses, setExpenses] = useState<ExpenseClaim[]>(() =>
-    loadFromStorage(STORAGE_KEYS.EXPENSES, INITIAL_EXPENSES)
-  );
+  const [expenses, setExpenses] = useState<ExpenseClaim[]>(() => {
+    const raw = loadFromStorage(STORAGE_KEYS.EXPENSES, INITIAL_EXPENSES);
+    const cleaned = (raw || []).filter((e: ExpenseClaim) => e && e.id !== 'EXP-2026-10-01' && Number(e.amount) !== 2800);
+    saveToStorage(STORAGE_KEYS.EXPENSES, cleaned);
+    return cleaned;
+  });
   const [separations, setSeparations] = useState<SeparationRecord[]>(() => {
     const raw = loadFromStorage(STORAGE_KEYS.SEPARATIONS, INITIAL_SEPARATIONS);
     return raw.filter(
@@ -370,7 +376,19 @@ export default function App() {
       }
     });
 
-    // 8. Load Organization Profile & Job Locations
+    // 8. Live subscribe to user credentials across devices
+    const unsubCreds = subscribeCredentialsFromCloud((cloudCreds) => {
+      if (!isMounted) return;
+      if (cloudCreds && Object.keys(cloudCreds).length > 0) {
+        setCredentials((prev) => {
+          const merged = { ...prev, ...cloudCreds };
+          localStorage.setItem(STORAGE_KEYS.CREDENTIALS, JSON.stringify(merged));
+          return merged;
+        });
+      }
+    });
+
+    // 9. Load Organization Profile & Job Locations
     fetchCompanyConfigFromCloud().then((config) => {
       if (!isMounted || !config) return;
       if (config.company) {
@@ -384,6 +402,15 @@ export default function App() {
     });
 
     // Fallback immediate fetches to populate quickly
+    fetchCredentialsFromCloud().then((cloudCreds) => {
+      if (isMounted && cloudCreds && Object.keys(cloudCreds).length > 0) {
+        setCredentials((prev) => {
+          const merged = { ...prev, ...cloudCreds };
+          localStorage.setItem(STORAGE_KEYS.CREDENTIALS, JSON.stringify(merged));
+          return merged;
+        });
+      }
+    });
     fetchEmployeesFromCloud().then((cloudEmps) => {
       if (isMounted && cloudEmps && cloudEmps.length > 0) {
         setEmployees((prev) => {
@@ -421,6 +448,7 @@ export default function App() {
       unsubSeparations();
       unsubVisits();
       unsubHolidays();
+      unsubCreds();
     };
   }, []);
 
@@ -790,11 +818,27 @@ export default function App() {
         // Group records into weekly blocks (Monday-based weeks)
         const weekMap = new Map<string, AttendanceRecord[]>();
         empRecords.forEach((r) => {
-          const d = new Date(r.date);
+          if (!r.date || typeof r.date !== 'string') return;
+          const parts = r.date.trim().split('-');
+          if (parts.length < 3) return;
+          const y = parseInt(parts[0], 10);
+          const m = parseInt(parts[1], 10) - 1;
+          const dayNum = parseInt(parts[2], 10);
+          if (isNaN(y) || isNaN(m) || isNaN(dayNum)) return;
+
+          const d = new Date(y, m, dayNum);
+          if (isNaN(d.getTime())) return;
+
           const day = d.getDay();
           const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-          const monday = new Date(d.setDate(diff));
-          const mondayStr = monday.toISOString().split('T')[0];
+          const monday = new Date(y, m, diff);
+          if (isNaN(monday.getTime())) return;
+
+          const monY = monday.getFullYear();
+          const monM = String(monday.getMonth() + 1).padStart(2, '0');
+          const monD = String(monday.getDate()).padStart(2, '0');
+          const mondayStr = `${monY}-${monM}-${monD}`;
+
           if (!weekMap.has(mondayStr)) weekMap.set(mondayStr, []);
           weekMap.get(mondayStr)!.push(r);
         });
@@ -811,10 +855,20 @@ export default function App() {
           };
           const dayKeys: (keyof typeof hours)[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
           recs.forEach((r) => {
-            const dayIdx = new Date(r.date).getDay();
+            if (!r.date) return;
+            const parts = r.date.trim().split('-');
+            if (parts.length < 3) return;
+            const y = parseInt(parts[0], 10);
+            const m = parseInt(parts[1], 10) - 1;
+            const dayNum = parseInt(parts[2], 10);
+            const dObj = new Date(y, m, dayNum);
+            if (isNaN(dObj.getTime())) return;
+            const dayIdx = dObj.getDay();
             const key = dayKeys[dayIdx];
             const h = Number(r.hoursWorked) || 8;
-            hours[key] = Math.round(((hours[key] || 0) + h) * 10) / 10;
+            if (key) {
+              hours[key] = Math.round(((hours[key] || 0) + h) * 10) / 10;
+            }
           });
           const totalHours = Math.round(Object.values(hours).reduce((sum, h) => sum + h, 0) * 10) / 10;
           const entryId = `TS-BIO-${emp.id}-${weekStart}`;
@@ -1036,16 +1090,19 @@ export default function App() {
   };
 
   const handleUpdatePassword = (empId: string, newPass: string) => {
+    const credObj: UserCredential = {
+      ...(credentials[empId] || { employeeId: empId, role: 'employee' as UserRole }),
+      employeeId: empId,
+      password: newPass,
+      mustChangePassword: false,
+    };
     const updated = {
       ...credentials,
-      [empId]: {
-        ...(credentials[empId] || { employeeId: empId, role: 'employee' as UserRole }),
-        password: newPass,
-        mustChangePassword: false,
-      },
+      [empId]: credObj,
     };
     setCredentials(updated);
     localStorage.setItem(STORAGE_KEYS.CREDENTIALS, JSON.stringify(updated));
+    saveCredentialToCloud(credObj).catch(() => {});
   };
 
   const handleLoginSuccess = (emp: Employee, role: UserRole) => {
@@ -1253,6 +1310,7 @@ export default function App() {
                 employees={employees}
                 attendance={attendance}
                 leaves={leaves}
+                visits={visits}
                 currentUser={currentUser}
                 currentRole={currentRole}
                 company={company}

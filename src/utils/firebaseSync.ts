@@ -23,7 +23,8 @@ import {
   IssuedLetter, 
   CompanyProfile,
   LEEDO_JOB_LOCATIONS,
-  GovernmentHoliday
+  GovernmentHoliday,
+  UserCredential
 } from '../types/hris';
 import { OFFICIAL_BANGLADESH_HOLIDAYS_2026 } from '../data/bangladeshHolidays';
 import {
@@ -655,6 +656,53 @@ export async function deleteHolidayFromCloud(holidayId: string): Promise<void> {
     await deleteDoc(doc(db, 'holidays', holidayId));
   } catch (err) {
     console.warn('Failed to delete holiday from cloud:', err);
+  }
+}
+
+// -----------------------------------------------------------------------------
+// USER CREDENTIALS & PASSWORD SYNC (Cross-Device Persistence)
+// -----------------------------------------------------------------------------
+export async function fetchCredentialsFromCloud(): Promise<Record<string, UserCredential>> {
+  try {
+    const snap = await getDocs(collection(db, 'user_credentials'));
+    const creds: Record<string, UserCredential> = {};
+    snap.forEach((d) => {
+      const data = d.data() as UserCredential;
+      if (data && data.employeeId && data.password) {
+        creds[data.employeeId] = data;
+      }
+    });
+    return creds;
+  } catch (err) {
+    console.warn('Failed to fetch credentials from cloud:', err);
+    return {};
+  }
+}
+
+export function subscribeCredentialsFromCloud(onData: (creds: Record<string, UserCredential>) => void): () => void {
+  return onSnapshot(
+    collection(db, 'user_credentials'),
+    (snapshot) => {
+      if (!snapshot.empty) {
+        const creds: Record<string, UserCredential> = {};
+        snapshot.forEach((d) => {
+          const data = d.data() as UserCredential;
+          if (data && data.employeeId && data.password) {
+            creds[data.employeeId] = data;
+          }
+        });
+        onData(creds);
+      }
+    },
+    (err) => console.warn('Firestore credentials onSnapshot error:', err)
+  );
+}
+
+export async function saveCredentialToCloud(cred: UserCredential): Promise<void> {
+  try {
+    await setDoc(doc(db, 'user_credentials', cred.employeeId), cred, { merge: true });
+  } catch (err) {
+    console.warn('Failed to save credential to cloud:', err);
   }
 }
 

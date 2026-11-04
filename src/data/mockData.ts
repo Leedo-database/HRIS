@@ -249,18 +249,5 @@ export const INITIAL_APPRAISALS: PerformanceAppraisal[] = [
   },
 ];
 
-export const INITIAL_EXPENSES: ExpenseClaim[] = [
-  {
-    id: 'EXP-2026-10-01',
-    employeeId: '1007',
-    employeeName: 'Athui Marma',
-    department: 'Program & Operation',
-    projectName: 'Child Protection & Street Hub',
-    title: 'Emergency Night Transit & Shelter Relocation Fare',
-    claimDate: '2026-10-10',
-    category: 'Travel / Field Fare',
-    amount: 2800,
-    description: 'Transit fare for transporting 3 vulnerable street children to Kamalapur Shelter with emergency food packs and medical support.',
-    status: 'Approved',
-  },
-];
+export const INITIAL_EXPENSES: ExpenseClaim[] = [];
+

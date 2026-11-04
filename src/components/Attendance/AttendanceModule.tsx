@@ -351,59 +351,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
     onUpdateAttendance(updated);
   };
 
-  // Midnight Auto-Checkout Rule:
-  // "jodi kew check out dite vule jay thole se rat 12 tar por auto check out hoye jabe and ta check out time 07 ta dora hobe"
-  const runMidnightAutoCheckout = (forced = false) => {
-    // If date < todayStr, midnight has already passed for that day.
-    // If forced is true, check out any open punch today or earlier.
-    const unclosedRecords = attendance.filter((a) => {
-      if (!a.clockInTime || (a.clockOutTime && a.clockOutTime.trim() !== '')) return false;
-      // Past days: midnight has passed
-      if (a.date < todayStr) return true;
-      // Forced manual execution
-      if (forced && a.date === todayStr) return true;
-      return false;
-    });
 
-    if (unclosedRecords.length === 0) {
-      if (forced) alert('সকল কর্মীর চেক-আউট ইতিমধ্যেই সম্পন্ন রয়েছে। কোনো অসমাপ্ত পাঞ্চ পাওয়া যায়নি। (All employees checked out).');
-      return;
-    }
-
-    let count = 0;
-    unclosedRecords.forEach((rec) => {
-      const inMins = parseTimeToMinutes(rec.clockInTime);
-      const outMins = 19 * 60; // 07:00 PM = 19:00
-      const diffMins = Math.max(60, outMins - inMins);
-      const calculatedHours = Math.round((diffMins / 60) * 10) / 10;
-
-      const updatedRecord: AttendanceRecord = {
-        ...rec,
-        clockOutTime: '19:00:00',
-        hoursWorked: calculatedHours,
-        locationNote: (rec.locationNote ? rec.locationNote + ' | ' : '') + 'রাত ১২টার পর অটো-চেকআউট (সন্ধ্যা ০৭:০০ টা)',
-      };
-      onUpdateAttendance(updatedRecord);
-      count++;
-    });
-
-    if (forced) {
-      alert(`রাত ১২টার পর নির্ধারিত সন্ধ্যা ০৭:০০ টায় (19:00) সফলভাবে ${count} জন কর্মীর অটো-চেকআউট সম্পন্ন হয়েছে।`);
-    }
-  };
-
-  // Run midnight auto-checkout check on mount and every 60s
-  useEffect(() => {
-    runMidnightAutoCheckout(false);
-    const interval = setInterval(() => {
-      runMidnightAutoCheckout(false);
-    }, 60000);
-    return () => clearInterval(interval);
-  }, [attendance, todayStr]);
-
-  const pendingAutoCheckoutCount = attendance.filter(
-    (a) => a.clockInTime && (!a.clockOutTime || a.clockOutTime.trim() === '') && a.date < todayStr
-  ).length;
 
   const handleBiometricImport = (importedRecords: AttendanceRecord[]) => {
     if (onImportAttendanceRecords) {
@@ -489,21 +437,6 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
         {/* Action Buttons for HR Admin */}
         {currentRole === 'hr_admin' && (
           <div className="flex flex-wrap items-center gap-2">
-            {/* Midnight Auto-Checkout Trigger Button (Checkout at 07:00 PM) */}
-            <button
-              type="button"
-              onClick={() => runMidnightAutoCheckout(true)}
-              className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-xs transition-all cursor-pointer"
-              title="যদি কোনো কর্মী চেক-আউট দিতে ভুলে যান, রাত ১২টার পর স্বয়ংক্রিয়ভাবে সন্ধ্যা ০৭:০০ টায় (19:00) চেক-আউট গণ্য হবে"
-            >
-              <Moon className="w-3.5 h-3.5 text-amber-400" />
-              <span>রাত ১২টার পর অটো-চেকআউট (সন্ধ্যা ০৭:০০ টা)</span>
-              {pendingAutoCheckoutCount > 0 && (
-                <span className="bg-amber-500 text-slate-900 text-[10px] font-black px-1.5 py-0.2 rounded-full">
-                  {pendingAutoCheckoutCount}
-                </span>
-              )}
-            </button>
 
             {/* Biometric Machine & OCR Import Button */}
             <button
