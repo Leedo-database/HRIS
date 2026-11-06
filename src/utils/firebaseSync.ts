@@ -24,7 +24,8 @@ import {
   CompanyProfile,
   LEEDO_JOB_LOCATIONS,
   GovernmentHoliday,
-  UserCredential
+  UserCredential,
+  LeaveBalance
 } from '../types/hris';
 import { OFFICIAL_BANGLADESH_HOLIDAYS_2026 } from '../data/bangladeshHolidays';
 import {
@@ -393,6 +394,62 @@ export async function saveLeaveToCloud(leave: LeaveRequest): Promise<void> {
     await setDoc(doc(db, 'leaves', leave.id), leave, { merge: true });
   } catch (err) {
     console.warn('Failed to save leave to cloud:', err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 4.1 LEAVE BALANCES SYNC (Permanent Multi-Year Retention)
+// ---------------------------------------------------------------------------
+
+export async function fetchLeaveBalancesFromCloud(): Promise<Record<string, LeaveBalance>> {
+  const path = 'leave_balances';
+  try {
+    const snap = await getDocs(collection(db, path));
+    const balances: Record<string, LeaveBalance> = {};
+    if (!snap.empty) {
+      snap.forEach((d) => {
+        const bal = d.data() as LeaveBalance;
+        if (bal && bal.employeeId) {
+          balances[bal.employeeId] = bal;
+        }
+      });
+      return balances;
+    }
+    return {};
+  } catch (err) {
+    console.warn('Could not read leave balances from Firestore:', err);
+    return {};
+  }
+}
+
+export function subscribeLeaveBalancesFromCloud(onData: (balances: Record<string, LeaveBalance>) => void): () => void {
+  const path = 'leave_balances';
+  return onSnapshot(
+    collection(db, path),
+    (snapshot) => {
+      if (!snapshot.empty) {
+        const balances: Record<string, LeaveBalance> = {};
+        snapshot.forEach((d) => {
+          const bal = d.data() as LeaveBalance;
+          if (bal && bal.employeeId) {
+            balances[bal.employeeId] = bal;
+          }
+        });
+        onData(balances);
+      }
+    },
+    (error) => {
+      console.warn('Firestore onSnapshot error on leave balances:', error);
+    }
+  );
+}
+
+export async function saveLeaveBalanceToCloud(balance: LeaveBalance): Promise<void> {
+  try {
+    if (!isValidLeedoStaffId(balance.employeeId)) return;
+    await setDoc(doc(db, 'leave_balances', balance.employeeId), balance, { merge: true });
+  } catch (err) {
+    console.warn('Failed to save leave balance to cloud:', err);
   }
 }
 

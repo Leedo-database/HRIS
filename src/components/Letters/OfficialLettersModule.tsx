@@ -885,6 +885,25 @@ export const OfficialLettersModule: React.FC<OfficialLettersModuleProps> = ({
                         </td>
                       </tr>
                       <tr>
+                        <td className="p-2.5 font-bold">Leave Quota Statement (হিসাব বিবরণী)</td>
+                        <td className="p-2.5">
+                          <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
+                            <div className="bg-slate-50 p-1.5 rounded border border-slate-200">
+                              <span className="text-slate-500 block">মোট কোটা (ছিল)</span>
+                              <span className="font-bold text-slate-800">{emp?.casualLeaveQuota || 16} দিন</span>
+                            </div>
+                            <div className="bg-slate-50 p-1.5 rounded border border-slate-200">
+                              <span className="text-slate-500 block">ভোগকৃত ছুটি</span>
+                              <span className="font-bold text-amber-700">২ দিন</span>
+                            </div>
+                            <div className="bg-indigo-50 p-1.5 rounded border border-indigo-200">
+                              <span className="text-indigo-700 block font-semibold">অবশিষ্ট ব্যালেন্স (আছে)</span>
+                              <span className="font-bold text-indigo-700">{Math.max(0, (emp?.casualLeaveQuota || 16) - 2)} দিন</span>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                      <tr>
                         <td className="p-2.5 font-bold">Reason for Leave</td>
                         <td className="p-2.5 italic">
                           Personal family urgency / Rest and health recuperation per organization leave policy.

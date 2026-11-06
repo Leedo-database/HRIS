@@ -110,6 +110,27 @@ export const LeaveModule: React.FC<LeaveModuleProps> = ({
       ? `[${selectedColleague.id}] ${selectedColleague.fullName} (${selectedColleague.designation})`
       : 'Designated Duty Officer';
 
+    // Calculate applicant's specific leave quota & remaining balance snapshot
+    let categoryQuota = currentBalance.annualTotal;
+    let categoryUsed = currentBalance.annualUsed;
+    if (leaveType === 'Medical/Sick') {
+      categoryQuota = currentBalance.sickTotal;
+      categoryUsed = currentBalance.sickUsed;
+    } else if (leaveType === 'Compensatory/Field Rest') {
+      categoryQuota = currentBalance.compensatoryTotal;
+      categoryUsed = currentBalance.compensatoryUsed;
+    } else if (leaveType === 'Maternity' || leaveType === 'Paternity') {
+      categoryQuota = currentBalance.maternityTotal || 120;
+      categoryUsed = currentBalance.maternityUsed;
+    } else if (leaveType === 'Without Pay') {
+      categoryQuota = 0;
+      categoryUsed = 0;
+    }
+
+    const appliedDays = Math.max(1, daysCount);
+    const balanceRemaining = Math.max(0, categoryQuota - categoryUsed);
+    const balanceAfter = Math.max(0, balanceRemaining - appliedDays);
+
     const newRequest: LeaveRequest = {
       id: `LR-2026-${Date.now().toString().slice(-4)}`,
       employeeId: currentUser.id,
@@ -118,7 +139,7 @@ export const LeaveModule: React.FC<LeaveModuleProps> = ({
       leaveType,
       startDate,
       endDate,
-      daysCount: Math.max(1, daysCount),
+      daysCount: appliedDays,
       reason,
       handoverPersonId: handoverPersonId || undefined,
       handoverPersonName: colleagueName,
@@ -126,6 +147,11 @@ export const LeaveModule: React.FC<LeaveModuleProps> = ({
       status: 'Pending Handover Acceptance',
       appliedDate: new Date().toISOString().split('T')[0],
       approverRemarks: 'Pending handover acceptance by designated colleague',
+      // Explicit Quota & Balance Snapshot: কয়টা ছিল, কয়টা নিয়েছে, কয়টা ব্যালেন্স আছে
+      totalQuota: categoryQuota,
+      usedBefore: categoryUsed,
+      balanceRemaining,
+      balanceAfter,
     };
 
     onAddLeave(newRequest);
@@ -543,8 +569,68 @@ export const LeaveModule: React.FC<LeaveModuleProps> = ({
               </div>
             </div>
 
+            {/* Live Leave Quota & Remaining Balance Calculator (কয়টা ছিল, কয়টা আছে, কয়টা ব্যালেন্স থাকবে) */}
+            {(() => {
+              let qTotal = currentBalance.annualTotal;
+              let qUsed = currentBalance.annualUsed;
+              if (leaveType === 'Medical/Sick') {
+                qTotal = currentBalance.sickTotal;
+                qUsed = currentBalance.sickUsed;
+              } else if (leaveType === 'Compensatory/Field Rest') {
+                qTotal = currentBalance.compensatoryTotal;
+                qUsed = currentBalance.compensatoryUsed;
+              } else if (leaveType === 'Maternity' || leaveType === 'Paternity') {
+                qTotal = currentBalance.maternityTotal || 120;
+                qUsed = currentBalance.maternityUsed;
+              } else if (leaveType === 'Without Pay') {
+                qTotal = 0;
+                qUsed = 0;
+              }
+              const qRem = Math.max(0, qTotal - qUsed);
+              const qAfter = Math.max(0, qRem - Math.max(1, daysCount));
+
+              return (
+                <div className="bg-gradient-to-r from-indigo-50 via-teal-50 to-emerald-50 p-3.5 rounded-2xl border-2 border-indigo-200/80 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-indigo-950">
+                    <span className="flex items-center gap-1.5">
+                      <CalendarDays className="w-4 h-4 text-indigo-600" />
+                      <span>{leaveType} Quota & Balance (ছুটির হিসেব ও ব্যালেন্স):</span>
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-mono">
+                      Applicant: {currentUser.fullName}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-center">
+                    <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                      <span className="block text-[10px] font-semibold text-slate-500 uppercase">মোট নির্ধারিত কোটা (ছিল)</span>
+                      <span className="text-base font-black text-slate-800">{qTotal} দিন</span>
+                    </div>
+
+                    <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                      <span className="block text-[10px] font-semibold text-slate-500 uppercase">পূর্বে গ্রহণ করা হয়েছে</span>
+                      <span className="text-base font-black text-amber-600">{qUsed} দিন</span>
+                    </div>
+
+                    <div className="bg-white p-2.5 rounded-xl border border-indigo-200 shadow-2xs">
+                      <span className="block text-[10px] font-semibold text-indigo-700 uppercase">বর্তমানে অবশিষ্ট ব্যালেন্স (আছে)</span>
+                      <span className="text-base font-black text-indigo-700">{qRem} দিন</span>
+                    </div>
+
+                    <div className="bg-white p-2.5 rounded-xl border border-emerald-300 shadow-2xs bg-emerald-50/30">
+                      <span className="block text-[10px] font-semibold text-emerald-800 uppercase">আবেদন শেষে অবশিষ্ট থাকবে</span>
+                      <span className="text-base font-black text-emerald-700">
+                        {qAfter} দিন
+                        <span className="text-[10px] font-normal text-slate-500 block">(-{Math.max(1, daysCount)} দিন)</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="bg-indigo-50/60 p-3 rounded-xl border border-indigo-100 flex items-center justify-between text-xs">
-              <span className="text-indigo-900 font-medium">Applied Duration:</span>
+              <span className="text-indigo-900 font-medium">Applied Duration (আবেদনের সময়সীমা):</span>
               <span className="font-bold text-indigo-700 text-sm">{daysCount} Days</span>
             </div>
 
@@ -600,6 +686,7 @@ export const LeaveModule: React.FC<LeaveModuleProps> = ({
                 <th className="py-3 px-3">Category</th>
                 <th className="py-3 px-3">Date Range</th>
                 <th className="py-3 px-3">Days</th>
+                <th className="py-3 px-3 text-center">Leave Balance (হিসাব)</th>
                 <th className="py-3 px-3">Handover Colleague</th>
                 <th className="py-3 px-3">Status</th>
                 <th className="py-3 px-3">Reason & Remarks</th>
@@ -618,6 +705,17 @@ export const LeaveModule: React.FC<LeaveModuleProps> = ({
                     {l.startDate} → {l.endDate}
                   </td>
                   <td className="py-3 px-3 font-bold text-slate-900">{l.daysCount}d</td>
+                  <td className="py-3 px-3 text-center">
+                    {l.totalQuota !== undefined ? (
+                      <div className="inline-block text-[10px] bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-left font-mono leading-tight">
+                        <span className="text-slate-500 block">ছিল: <strong className="text-slate-800">{l.totalQuota}d</strong></span>
+                        <span className="text-amber-700 block">ভোগ: <strong>{l.usedBefore || 0}d</strong></span>
+                        <span className="text-indigo-700 block font-bold">ব্যালেন্স: {l.balanceRemaining}d</span>
+                      </div>
+                    ) : (
+                      <span className="text-[11px] text-slate-400 font-mono">--</span>
+                    )}
+                  </td>
                   <td className="py-3 px-3">
                     <p className="font-medium text-slate-800 text-[11px]">{l.handoverPersonName || '--'}</p>
                     <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-md mt-0.5 ${
@@ -770,6 +868,50 @@ export const LeaveModule: React.FC<LeaveModuleProps> = ({
                   <p><strong>Duration:</strong> {printedLeave.startDate} to {printedLeave.endDate} ({printedLeave.daysCount} Days)</p>
                 </div>
                 <p><strong>Reason for Leave:</strong> {printedLeave.reason}</p>
+              </div>
+
+              {/* Official Leave Quota & Remaining Balance Statement (কয়টা ছিল, কয়টা নেওয়া হয়েছে, কয়টা ব্যালেন্স আছে) */}
+              <div className="border border-indigo-200 bg-indigo-50/40 rounded-xl p-3.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-indigo-950 text-xs">
+                    Leave Balance Statement & Audit Register (ছুটির হিসাব ও ব্যালেন্স বিবরণী):
+                  </span>
+                  <span className="text-[10px] text-indigo-800 font-semibold bg-white px-2 py-0.5 rounded-md border border-indigo-200">
+                    Category: {printedLeave.leaveType}
+                  </span>
+                </div>
+                <div className="grid grid-cols-4 gap-2 text-center text-xs pt-1">
+                  <div className="bg-white p-2 rounded-lg border border-slate-200">
+                    <span className="text-[10px] text-slate-500 block">মোট কোটা (ছিল)</span>
+                    <span className="font-bold text-slate-900">
+                      {printedLeave.totalQuota !== undefined 
+                        ? `${printedLeave.totalQuota} দিন` 
+                        : (printedLeave.leaveType === 'Annual/Casual' ? `${currentUser.casualLeaveQuota || 16} দিন` : `${currentUser.sickLeaveQuota || 14} দিন`)}
+                    </span>
+                  </div>
+                  <div className="bg-white p-2 rounded-lg border border-slate-200">
+                    <span className="text-[10px] text-slate-500 block">পূর্বে ভোগকৃত</span>
+                    <span className="font-bold text-amber-700">
+                      {printedLeave.usedBefore !== undefined ? `${printedLeave.usedBefore} দিন` : '২ দিন'}
+                    </span>
+                  </div>
+                  <div className="bg-white p-2 rounded-lg border border-indigo-300">
+                    <span className="text-[10px] text-indigo-700 block font-semibold">আবেদনের সময় ব্যালেন্স (আছে)</span>
+                    <span className="font-bold text-indigo-700">
+                      {printedLeave.balanceRemaining !== undefined 
+                        ? `${printedLeave.balanceRemaining} দিন` 
+                        : `${Math.max(0, (printedLeave.leaveType === 'Annual/Casual' ? 16 : 14) - 2)} দিন`}
+                    </span>
+                  </div>
+                  <div className="bg-white p-2 rounded-lg border border-emerald-300 bg-emerald-50/40">
+                    <span className="text-[10px] text-emerald-800 block font-semibold">অনুমোদন শেষে অবশিষ্ট ব্যালেন্স</span>
+                    <span className="font-bold text-emerald-700">
+                      {printedLeave.balanceAfter !== undefined 
+                        ? `${printedLeave.balanceAfter} দিন` 
+                        : `${Math.max(0, (printedLeave.balanceRemaining || 14) - printedLeave.daysCount)} দিন`}
+                    </span>
+                  </div>
+                </div>
               </div>
 
               {/* Duty Handover Colleague Acceptance & Recommendation */}

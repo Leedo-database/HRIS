@@ -289,6 +289,12 @@ export interface LeaveRequest {
   appliedDate: string;
   approverRemarks?: string;
   approvedBy?: string;
+
+  // Leave Quota & Balance Snapshot (কয়টা ছিল, কয়টা নেওয়া হয়েছে, কয়টা ব্যালেন্স আছে)
+  totalQuota?: number;
+  usedBefore?: number;
+  balanceRemaining?: number;
+  balanceAfter?: number;
 }
 
 export interface VisitAuthorization {

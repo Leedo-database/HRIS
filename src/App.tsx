@@ -73,7 +73,10 @@ import {
   testFirestoreConnection,
   fetchCredentialsFromCloud,
   subscribeCredentialsFromCloud,
-  saveCredentialToCloud
+  saveCredentialToCloud,
+  fetchLeaveBalancesFromCloud,
+  subscribeLeaveBalancesFromCloud,
+  saveLeaveBalanceToCloud
 } from './utils/firebaseSync';
 
 import { Header } from './components/Header';
@@ -388,7 +391,19 @@ export default function App() {
       }
     });
 
-    // 9. Load Organization Profile & Job Locations
+    // 9. Live subscribe to Leave Balances (Multi-year permanent tracking)
+    const unsubLeaveBalances = subscribeLeaveBalancesFromCloud((cloudBalances) => {
+      if (!isMounted) return;
+      if (cloudBalances && Object.keys(cloudBalances).length > 0) {
+        setLeaveBalances((prev) => {
+          const merged = { ...prev, ...cloudBalances };
+          saveToStorage(STORAGE_KEYS.LEAVE_BALANCES, merged);
+          return merged;
+        });
+      }
+    });
+
+    // 10. Load Organization Profile & Job Locations
     fetchCompanyConfigFromCloud().then((config) => {
       if (!isMounted || !config) return;
       if (config.company) {
@@ -402,6 +417,15 @@ export default function App() {
     });
 
     // Fallback immediate fetches to populate quickly
+    fetchLeaveBalancesFromCloud().then((cloudBalances) => {
+      if (isMounted && cloudBalances && Object.keys(cloudBalances).length > 0) {
+        setLeaveBalances((prev) => {
+          const merged = { ...prev, ...cloudBalances };
+          saveToStorage(STORAGE_KEYS.LEAVE_BALANCES, merged);
+          return merged;
+        });
+      }
+    });
     fetchCredentialsFromCloud().then((cloudCreds) => {
       if (isMounted && cloudCreds && Object.keys(cloudCreds).length > 0) {
         setCredentials((prev) => {
@@ -449,6 +473,7 @@ export default function App() {
       unsubVisits();
       unsubHolidays();
       unsubCreds();
+      unsubLeaveBalances();
     };
   }, []);
 
@@ -773,11 +798,63 @@ export default function App() {
     });
   };
 
+  // Helper: auto-generate or update weekly timesheet block from attendance record
+  const syncAttendanceRecordToWeeklyTimesheet = (rec: AttendanceRecord) => {
+    if (!rec || !rec.date || !rec.employeeId) return;
+    const parts = rec.date.trim().split('-');
+    if (parts.length < 3) return;
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const dayNum = parseInt(parts[2], 10);
+    const d = new Date(y, m, dayNum);
+    if (isNaN(d.getTime())) return;
+
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(y, m, diff);
+    if (isNaN(monday.getTime())) return;
+    const mondayStr = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
+
+    const emp = employees.find((e) => e.id === rec.employeeId);
+    if (!emp) return;
+
+    const entryId = `TS-BIO-${emp.id}-${mondayStr}`;
+    setTimesheets((prev) => {
+      const existing = prev.find((t) => t.id === entryId || (t.employeeId === emp.id && t.weekStarting === mondayStr));
+      const hours = existing ? { ...existing.hours } : { mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, sun: 0 };
+      const dayKeys: (keyof typeof hours)[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+      const dayKey = dayKeys[day];
+      const h = Number(rec.hoursWorked) || 8;
+      hours[dayKey] = h;
+      const totalHours = Math.round(Object.values(hours).reduce((sum, val) => sum + val, 0) * 10) / 10;
+
+      const updatedEntry: TimesheetEntry = {
+        id: existing?.id || entryId,
+        employeeId: emp.id,
+        employeeName: emp.fullName,
+        weekStarting: mondayStr,
+        projectCode: 'LEEDO-CP-2026',
+        projectName: emp.assignedProject || 'Street Children Shelter & Rescue Mission',
+        activityDescription: `Duty hours logged: ${h}h on ${rec.date} at ${rec.punchLocationName || emp.workStation || 'Center'}.`,
+        hours,
+        totalHours,
+        status: 'Approved',
+        supervisorComment: 'Duty verified via attendance and punch record',
+      };
+
+      const nextList = [updatedEntry, ...prev.filter((t) => t.id !== updatedEntry.id)];
+      saveToStorage(STORAGE_KEYS.TIMESHEETS, nextList);
+      saveTimesheetToCloud(updatedEntry).catch(() => {});
+      return nextList;
+    });
+  };
+
   const handleAddAttendance = (rec: AttendanceRecord) => {
     const updated = [rec, ...attendance];
     setAttendance(updated);
     saveToStorage(STORAGE_KEYS.ATTENDANCE, updated);
     saveAttendanceToCloud(rec);
+    syncAttendanceRecordToWeeklyTimesheet(rec);
   };
 
   const handleUpdateAttendance = (rec: AttendanceRecord) => {
@@ -785,6 +862,7 @@ export default function App() {
     setAttendance(updated);
     saveToStorage(STORAGE_KEYS.ATTENDANCE, updated);
     saveAttendanceToCloud(rec);
+    syncAttendanceRecordToWeeklyTimesheet(rec);
   };
 
   const handleImportAttendanceRecords = (importedRecords: AttendanceRecord[]) => {
@@ -913,10 +991,46 @@ export default function App() {
   };
 
   const handleUpdateLeave = (leave: LeaveRequest) => {
+    const previous = leaves.find((l) => l.id === leave.id);
     const updated = leaves.map((l) => (l.id === leave.id ? leave : l));
     setLeaves(updated);
     saveToStorage(STORAGE_KEYS.LEAVES, updated);
     saveLeaveToCloud(leave);
+
+    // If leave was just Approved, deduct from leave balance and sync to cloud permanently
+    if (leave.status === 'Approved' && previous?.status !== 'Approved') {
+      setLeaveBalances((prev) => {
+        const emp = employees.find((e) => e.id === leave.employeeId);
+        const curBal: LeaveBalance = prev[leave.employeeId] || {
+          employeeId: leave.employeeId,
+          annualTotal: emp?.casualLeaveQuota || 16,
+          annualUsed: 0,
+          sickTotal: emp?.sickLeaveQuota || 14,
+          sickUsed: 0,
+          maternityTotal: 0,
+          maternityUsed: 0,
+          compensatoryTotal: 6,
+          compensatoryUsed: 0,
+        };
+
+        const updatedBal: LeaveBalance = { ...curBal };
+        const days = leave.daysCount || 1;
+        if (leave.leaveType === 'Annual/Casual') {
+          updatedBal.annualUsed = (updatedBal.annualUsed || 0) + days;
+        } else if (leave.leaveType === 'Medical/Sick') {
+          updatedBal.sickUsed = (updatedBal.sickUsed || 0) + days;
+        } else if (leave.leaveType === 'Compensatory/Field Rest') {
+          updatedBal.compensatoryUsed = (updatedBal.compensatoryUsed || 0) + days;
+        } else if (leave.leaveType === 'Maternity' || leave.leaveType === 'Paternity') {
+          updatedBal.maternityUsed = (updatedBal.maternityUsed || 0) + days;
+        }
+
+        const nextBalances = { ...prev, [leave.employeeId]: updatedBal };
+        saveToStorage(STORAGE_KEYS.LEAVE_BALANCES, nextBalances);
+        saveLeaveBalanceToCloud(updatedBal).catch(() => {});
+        return nextBalances;
+      });
+    }
   };
 
   const handleAddHoliday = (holiday: GovernmentHoliday) => {

@@ -17,6 +17,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Leave Balances & Quota Tracker
+    match /leave_balances/{employeeId} {
+      allow read, write: if true;
+    }
+
     // Official Government & Public Holidays
     match /holidays/{holidayId} {
       allow read, write: if true;
