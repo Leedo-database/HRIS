@@ -12,7 +12,7 @@ import {
   VisitAuthorization
 } from '../../types/hris';
 import { OFFICIAL_BANGLADESH_HOLIDAYS_2026 } from '../../data/bangladeshHolidays';
-import { getHolidayOnDate, isEmployeeActive, calculateDailyHours, formatHours } from '../../utils/calculations';
+import { getHolidayOnDate, isEmployeeActive, calculateDailyHours, formatHours, parseDateToIso } from '../../utils/calculations';
 import { 
   CalendarCheck2, 
   Plus, 
@@ -42,6 +42,7 @@ import {
   Fingerprint,
   BadgeCheck
 } from 'lucide-react';
+import { BiometricImportModal } from '../Attendance/BiometricImportModal';
 
 interface TimesheetModuleProps {
   timesheets: TimesheetEntry[];
@@ -56,6 +57,7 @@ interface TimesheetModuleProps {
   visits?: VisitAuthorization[];
   onAddTimesheet: (entry: TimesheetEntry) => void;
   onUpdateTimesheet: (entry: TimesheetEntry) => void;
+  onImportAttendanceRecords?: (records: AttendanceRecord[]) => void;
 }
 
 const DAY_LABELS: Record<string, string> = {
@@ -83,9 +85,11 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
   visits = [],
   onAddTimesheet,
   onUpdateTimesheet,
+  onImportAttendanceRecords,
 }) => {
   // Month selector: Defaults to current month '2026-10' (October 2026)
   const [selectedMonth, setSelectedMonth] = useState<string>('2026-10');
+  const [isBiometricModalOpen, setIsBiometricModalOpen] = useState(false);
 
   // Sub-Tab Navigation: 1) Monthly Timesheets & Duty Log, 2) Late & Absenteeism Exception Timesheet
   const [activeTimesheetSubTab, setActiveTimesheetSubTab] = useState<'duty_timesheet' | 'exceptions_timesheet'>('duty_timesheet');
@@ -282,7 +286,7 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
     });
   };
 
-  // Helper to compute monthly calendar for an employee factoring in real attendance, late punch, absences, and gazetted holidays
+  // Helper to compute monthly calendar for an employee factoring in joining date, separation date, real attendance, late punch, absences, and gazetted holidays
   const getEmployeeMonthlyDays = (emp: Employee, monthKey: string) => {
     const [yearStr, monthStr] = monthKey.split('-');
     const year = parseInt(yearStr, 10);
@@ -294,9 +298,16 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
       : ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu'];
     const dailyHours = emp.dailyDutyHours || 8;
 
-    const empAttRecords = (attendance || []).filter(
-      (a) => a.employeeId === emp.id && a.date.startsWith(monthKey)
-    );
+    const empIdClean = String(emp.id || '').trim();
+    const empNameClean = (emp.fullName || '').trim().toLowerCase();
+    const empAttRecords = (attendance || []).filter((a) => {
+      if (!a || !a.date) return false;
+      const attEmpId = String(a.employeeId || '').trim();
+      const attName = String(a.employeeName || '').trim().toLowerCase();
+      const attDate = String(a.date).trim();
+      const matchesEmp = (attEmpId && attEmpId === empIdClean) || (attName && attName === empNameClean);
+      return matchesEmp && attDate.startsWith(monthKey);
+    });
     const empLeaves = (leaves || []).filter(
       (l) => l.employeeId === emp.id && l.status === 'Approved'
     );
@@ -308,22 +319,59 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
     let leaveDays = 0;
     let absentDays = 0;
     let lateDays = 0;
+    let offDays = 0;
     let totalWorkedHours = 0;
 
     const todayStr = new Date().toISOString().split('T')[0];
+    const joinIso = parseDateToIso(emp.joiningDate);
+    const sepIso = parseDateToIso(emp.separationDate);
 
     for (let day = 1; day <= daysInMonth; day++) {
       const dateObj = new Date(year, month - 1, day);
       const dayOfWeekShort = DAY_OF_WEEK_SHORT[dateObj.getDay()];
       const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       
+      const notYetJoined = joinIso ? dateStr < joinIso : false;
+      const alreadySeparated = sepIso ? dateStr > sepIso : false;
+      const isEmployed = !notYetJoined && !alreadySeparated;
+
+      if (!isEmployed) {
+        days.push({
+          dayNumber: day,
+          dateStr,
+          dayOfWeek: dayOfWeekShort,
+          isScheduledDuty: false,
+          isHoliday: false,
+          isLate: false,
+          isAbsent: false,
+          status: notYetJoined ? 'Not Yet Joined (যোগদানের পূর্ববর্তী)' : 'Separated (চাকরি হতে অব্যাহতি)',
+          hoursLogged: 0,
+          notes: notYetJoined 
+            ? `Staff officially joined on ${emp.joiningDate || joinIso}` 
+            : `Separated from LEEDO on ${emp.separationDate || sepIso}`,
+        });
+        continue;
+      }
+
       const isScheduledDuty = empDutyDays.includes(dayOfWeekShort);
       const hol = getHolidayOnDate(dateStr, holidays);
+
+      // 1. Scheduled Duty Days (কাজ করার কথা)
+      // Scheduled duty days are all calendar work days in the employee's active schedule MINUS official gazetted holidays
+      if (isScheduledDuty && !hol) {
+        scheduledDutyDays++;
+      } else if (!isScheduledDuty) {
+        offDays++;
+      }
+
+      if (hol) {
+        govtHolidayDays++;
+      }
 
       let status = 'Weekly Off-Day';
       let hoursLogged = 0;
       let notes = 'Weekend / Rostered Rest Day';
-      let isHoliday = false;
+      let isHoliday = !!hol;
       let isLate = false;
       let lateMinutes = 0;
       let isAbsent = false;
@@ -335,8 +383,8 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
         (v) => v.employeeId === emp.id && v.status === 'Approved' && dateStr >= v.startDate && dateStr <= v.endDate
       );
 
-      // 1. Check Attendance Record FIRST (Biometric Machine punch or Web Clock-In)
-      const attMatch = empAttRecords.find((a) => a.date === dateStr);
+      // Check Attendance Record (Biometric Machine punch or Web Clock-In)
+      const attMatch = empAttRecords.find((a) => (a.date || '').trim() === dateStr);
 
       if (attMatch && (attMatch.clockInTime || attMatch.hoursWorked || attMatch.status === 'Present' || attMatch.status === 'Late')) {
         clockInTime = attMatch.clockInTime;
@@ -392,15 +440,13 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
         status = 'Official Field Visit (অনুমোদিত ফিল্ড ভিজিট)';
         notes = `Official Field Visit: ${visitMatch.destination || visitMatch.purpose} • Project: ${visitMatch.assignedProject || 'LEEDO'} (Full duty credited)`;
       } else if (hol) {
-        // 2. Official Bangladesh Government Holiday (Paid Day Off)
-        isHoliday = true;
-        govtHolidayDays++;
+        // Official Bangladesh Government Holiday (Paid Day Off)
         status = `Govt Holiday (সরকারি ছুটি)`;
         hoursLogged = dailyHours; // Fully credited paid standard duty hours
         totalWorkedHours = Math.round((totalWorkedHours + dailyHours) * 10) / 10;
         notes = `Official Gazette Public Holiday: ${hol.titleBangla || hol.title} (Paid Day Off)`;
       } else {
-        // 3. Check Approved Leave
+        // Check Approved Leave
         const leaveMatch = empLeaves.find(
           (l) => dateStr >= l.startDate && dateStr <= l.endDate
         );
@@ -416,7 +462,6 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
           notes = 'Weekend / Rostered Rest Day';
         } else {
           // Scheduled duty day without attendance record
-          scheduledDutyDays++;
           if (autoMarkMissingBiometricAsAbsent && dateStr <= todayStr) {
             isAbsent = true;
             status = 'Absent (অনুপস্থিত / নো বায়োমেট্রিক পাঞ্চ)';
@@ -464,7 +509,7 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
       leaveDays,
       absentDays,
       lateDays,
-      offDays: Math.max(0, daysInMonth - scheduledDutyDays - govtHolidayDays),
+      offDays,
       totalWorkedHours: Math.round(totalWorkedHours * 10) / 10,
     };
   };
@@ -808,6 +853,18 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                     {(attendance || []).filter((a) => a.date.startsWith(selectedMonth) && (a.clockInTime || a.locationNote?.includes('Biometric') || a.id.includes('BIO'))).length}
                   </span>
                 </button>
+
+                {(currentRole === 'hr_admin' || currentRole === 'line_manager' || currentUser.id === '1001' || currentUser.id === '1002' || currentUser.id === '1057') && (
+                  <button
+                    type="button"
+                    onClick={() => setIsBiometricModalOpen(true)}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition-all shadow-xs cursor-pointer text-xs"
+                    title="Import attendance punches from biometric machine, Excel, or scanned photo"
+                  >
+                    <Fingerprint className="w-3.5 h-3.5" />
+                    <span>Import Biometric Data (বায়োমেট্রিক ডাটা ইমপোর্ট)</span>
+                  </button>
+                )}
               </div>
 
               {/* Quick Staff Switcher for Individual View */}
@@ -943,7 +1000,17 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="flex items-center gap-1.5 cursor-pointer bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 border border-slate-200 select-none">
+                        <input
+                          type="checkbox"
+                          checked={showLateData}
+                          onChange={(e) => setShowLateData(e.target.checked)}
+                          className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500"
+                        />
+                        <span>Late Highlight (দেরি দেখান)</span>
+                      </label>
+
                       <button
                         type="button"
                         onClick={() => setSelectedMonthlyPrintEmp(targetEmployee)}
@@ -998,48 +1065,56 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {staffStats.days.map((day) => (
-                          <tr key={day.dateStr} className={`hover:bg-slate-50/80 ${day.isHoliday ? 'bg-teal-50/30' : day.isAbsent ? 'bg-rose-50/30' : day.isLate ? 'bg-amber-50/30' : ''}`}>
-                            <td className="p-2.5 text-center font-mono font-semibold text-slate-500">{day.dayNumber}</td>
-                            <td className="p-2.5 font-medium text-slate-800 font-mono">
-                              {day.dateStr} <span className="text-slate-400 font-sans">({day.dayOfWeek})</span>
-                            </td>
-                            <td className="p-2.5 font-mono text-slate-700">
-                              {day.clockInTime ? (
-                                <span className="inline-flex items-center gap-1 font-semibold text-slate-900">
-                                  <Fingerprint className="w-3 h-3 text-indigo-600" />
-                                  <span>{day.clockInTime}</span>
+                        {staffStats.days.map((day) => {
+                          const isLateActive = day.isLate && showLateData;
+                          const effectiveStatus = (!showLateData && day.isLate) ? 'Present / Duty Performed' : day.status;
+                          const effectiveNotes = (!showLateData && day.isLate)
+                            ? `${targetEmployee.assignedProject || 'Street Children Shelter & Community Hub'} (${day.clockInTime || '10:00'} - ${day.clockOutTime || '18:00'})`
+                            : day.notes;
+
+                          return (
+                            <tr key={day.dateStr} className={`hover:bg-slate-50/80 ${day.isHoliday ? 'bg-teal-50/30' : day.isAbsent ? 'bg-rose-50/30' : isLateActive ? 'bg-amber-50/30' : ''}`}>
+                              <td className="p-2.5 text-center font-mono font-semibold text-slate-500">{day.dayNumber}</td>
+                              <td className="p-2.5 font-medium text-slate-800 font-mono">
+                                {day.dateStr} <span className="text-slate-400 font-sans">({day.dayOfWeek})</span>
+                              </td>
+                              <td className="p-2.5 font-mono text-slate-700">
+                                {day.clockInTime ? (
+                                  <span className="inline-flex items-center gap-1 font-semibold text-slate-900">
+                                    <Fingerprint className="w-3 h-3 text-indigo-600" />
+                                    <span>{day.clockInTime}</span>
+                                  </span>
+                                ) : '--'}
+                              </td>
+                              <td className="p-2.5 font-mono text-slate-700">
+                                {day.clockOutTime ? (
+                                  <span className="inline-flex items-center gap-1 font-semibold text-slate-900">
+                                    <span>{day.clockOutTime}</span>
+                                    {day.clockOutTime === '19:00:00' && (
+                                      <span className="text-[10px] text-amber-600 font-sans font-normal" title="Automatic checkout at 07:00 PM after midnight">(Auto)</span>
+                                    )}
+                                  </span>
+                                ) : '--'}
+                              </td>
+                              <td className="p-2.5 text-center font-mono font-bold text-indigo-700">
+                                {day.hoursLogged > 0 ? formatHours(day.hoursLogged) : '--'}
+                              </td>
+                              <td className="p-2.5">
+                                <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold ${
+                                  day.isHoliday ? 'bg-teal-100 text-teal-800' :
+                                  day.isAbsent ? 'bg-rose-100 text-rose-800' :
+                                  isLateActive ? 'bg-amber-100 text-amber-800' :
+                                  day.status.includes('Leave') ? 'bg-purple-100 text-purple-800' :
+                                  (day.isScheduledDuty || (!showLateData && day.isLate)) ? 'bg-emerald-100 text-emerald-800' :
+                                  'bg-slate-100 text-slate-600'
+                                }`}>
+                                  {effectiveStatus}
                                 </span>
-                              ) : '--'}
-                            </td>
-                            <td className="p-2.5 font-mono text-slate-700">
-                              {day.clockOutTime ? (
-                                <span className="inline-flex items-center gap-1 font-semibold text-slate-900">
-                                  <span>{day.clockOutTime}</span>
-                                  {day.clockOutTime === '19:00:00' && (
-                                    <span className="text-[10px] text-amber-600 font-sans font-normal" title="Automatic checkout at 07:00 PM after midnight">(Auto)</span>
-                                  )}
-                                </span>
-                              ) : '--'}
-                            </td>
-                            <td className="p-2.5 text-center font-mono font-bold text-indigo-700">
-                              {day.hoursLogged > 0 ? formatHours(day.hoursLogged) : '--'}
-                            </td>
-                            <td className="p-2.5">
-                              <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold ${
-                                day.isHoliday ? 'bg-teal-100 text-teal-800' :
-                                day.isAbsent ? 'bg-rose-100 text-rose-800' :
-                                day.isLate ? 'bg-amber-100 text-amber-800' :
-                                day.status.includes('Leave') ? 'bg-purple-100 text-purple-800' :
-                                day.isScheduledDuty ? 'bg-emerald-100 text-emerald-800' :
-                                'bg-slate-100 text-slate-600'
-                              }`}>
-                                {day.status}
-                              </span>
-                            </td>
-                            <td className="p-2.5 text-slate-600 text-[11px]">{day.notes}</td>
-                          </tr>
-                        ))}
+                              </td>
+                              <td className="p-2.5 text-slate-600 text-[11px]">{effectiveNotes}</td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -1253,6 +1328,14 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                     <span className="text-xs font-mono bg-white/10 px-3 py-1 rounded-xl border border-white/20">
                       Total Punches: <strong>{biometricLogs.length}</strong>
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsBiometricModalOpen(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                    >
+                      <Fingerprint className="w-3.5 h-3.5" />
+                      <span>Paste / Upload Punches (লগ ইমপোর্ট)</span>
+                    </button>
                   </div>
                 </div>
 
@@ -1263,8 +1346,16 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                       No Biometric Logs Found for {monthLabel}
                     </p>
                     <p className="text-xs text-slate-500 max-w-md mx-auto">
-                      বায়োমেট্রিক মেশিন থেকে লগ কপি করে পেস্ট করতে 'Attendance' মডিউলে গিয়ে 'Import Biometric Machine Logs' অপশন ব্যবহার করুন।
+                      বায়োমেট্রিক মেশিন থেকে লগ কপি করে পেস্ট করতে নিচের বাটনে ক্লিক করুন।
                     </p>
+                    <button
+                      type="button"
+                      onClick={() => setIsBiometricModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                    >
+                      <Fingerprint className="w-4 h-4" />
+                      <span>Paste Biometric Machine Logs (লগ পেস্ট করুন)</span>
+                    </button>
                   </div>
                 ) : (
                   <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
@@ -1856,10 +1947,10 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                                 </span>
                               ) : (
                                 <span className={
-                                  d.status.includes('Present') ? 'text-emerald-700' :
+                                  (d.status.includes('Present') || (!showLateData && d.isLate)) ? 'text-emerald-700 font-bold' :
                                   d.status.includes('Leave') ? 'text-amber-700' : 'text-slate-400'
                                 }>
-                                  {d.status}
+                                  {(!showLateData && d.isLate) ? 'Present / Duty Performed' : d.status}
                                 </span>
                               )}
                             </td>
@@ -1874,6 +1965,10 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                               {d.isHoliday ? (
                                 <span className="text-teal-900 font-bold">
                                   {d.notes}
+                                </span>
+                              ) : (!showLateData && d.isLate) ? (
+                                <span>
+                                  {selectedMonthlyPrintEmp.assignedProject || 'Street Children Shelter & Community Hub'} ({d.clockInTime || '10:00'} - {d.clockOutTime || '18:00'})
                                 </span>
                               ) : isLateHighlighted ? (
                                 <span className="text-amber-950 font-medium">
@@ -2509,6 +2604,21 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Biometric Machine CSV / Text Import Modal */}
+      {isBiometricModalOpen && (
+        <BiometricImportModal
+          isOpen={isBiometricModalOpen}
+          onClose={() => setIsBiometricModalOpen(false)}
+          employees={employees}
+          onImportRecords={(importedRecords) => {
+            if (onImportAttendanceRecords) {
+              onImportAttendanceRecords(importedRecords);
+            }
+            setIsBiometricModalOpen(false);
+          }}
+        />
       )}
     </div>
   );

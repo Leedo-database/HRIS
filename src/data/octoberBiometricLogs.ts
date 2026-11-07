@@ -11,6 +11,7 @@ interface PunchSpec {
   empName: string;
   station: string;
   acNo: string;
+  startDay?: number;
   lateDates?: Record<string, { inTime: string; lateMins: number }>;
   absentDates?: string[]; // Days with NO PUNCH at all (Unapproved Absences)
 }
@@ -51,7 +52,30 @@ const STAFF_PUNCH_SPECS: PunchSpec[] = [
       '2026-10-15': { inTime: '10:21:43', lateMins: 21 },
       '2026-10-27': { inTime: '10:33:55', lateMins: 33 },
     },
-    absentDates: ['2026-10-08', '2026-10-19'],
+    absentDates: [], // Habib is present every single scheduled working day!
+  },
+  {
+    empId: '1009',
+    empName: 'Rone Ahammed',
+    station: 'Head Office',
+    acNo: '9',
+    lateDates: {
+      '2026-10-07': { inTime: '11:04:25', lateMins: 49 },
+      '2026-10-15': { inTime: '11:05:24', lateMins: 50 },
+      '2026-10-26': { inTime: '10:44:21', lateMins: 29 },
+    },
+    absentDates: [], // Rone is present every single scheduled working day!
+  },
+  {
+    empId: '1100',
+    empName: 'Toufiq Ahmed',
+    station: 'Head Office',
+    acNo: '100',
+    startDay: 15, // Officially joined on 15 Oct 2026!
+    lateDates: {
+      '2026-10-28': { inTime: '10:18:52', lateMins: 18 },
+    },
+    absentDates: [],
   },
   {
     empId: '1005',
@@ -127,15 +151,16 @@ const STAFF_PUNCH_SPECS: PunchSpec[] = [
 
 export function generateOctoberBiometricAttendance(): AttendanceRecord[] {
   const records: AttendanceRecord[] = [];
-  const daysInOctober = 27; // Up to yesterday/today
+  const daysInOctober = 31; // Full month of October
 
   // Excluded dates: Fridays (weekly off for all) and Durga Puja Govt Holidays (Oct 20 & 21)
   const holidayDates = new Set(['2026-10-20', '2026-10-21']);
 
   STAFF_PUNCH_SPECS.forEach((spec) => {
     const absentSet = new Set(spec.absentDates || []);
+    const startDay = spec.startDay || 1;
 
-    for (let day = 1; day <= daysInOctober; day++) {
+    for (let day = startDay; day <= daysInOctober; day++) {
       const dateStr = `2026-10-${String(day).padStart(2, '0')}`;
       const dObj = new Date(2026, 9, day);
       const dayOfWeek = dObj.getDay();

@@ -54,6 +54,55 @@ export function isEmployeeSeparated(emp: Employee | null | undefined): boolean {
   return !isEmployeeActive(emp);
 }
 
+/**
+ * Normalizes varied date strings (e.g. '15-Oct-2026', '15/10/2026', '2026-10-15', '5-Sep-2022') to ISO 'YYYY-MM-DD'.
+ * Returns null for 'Founder', empty, or unparseable non-date strings.
+ */
+export function parseDateToIso(rawDate?: string | null): string | null {
+  if (!rawDate || typeof rawDate !== 'string') return null;
+  const trimmed = rawDate.trim();
+  if (
+    !trimmed ||
+    ['founder', 'permanent', 'n/a', 'na', 'null', 'undefined', 'contractual'].includes(trimmed.toLowerCase())
+  ) {
+    return null;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return trimmed;
+  }
+  const monMatch = trimmed.match(/^(\d{1,2})[-/ ]([A-Za-z]{3,9})[-/ ](\d{4})$/);
+  if (monMatch) {
+    const day = parseInt(monMatch[1], 10);
+    const monthNames: Record<string, string> = {
+      jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+      jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12'
+    };
+    const mKey = monMatch[2].slice(0, 3).toLowerCase();
+    const mm = monthNames[mKey];
+    if (mm) {
+      return `${monMatch[3]}-${mm}-${String(day).padStart(2, '0')}`;
+    }
+  }
+  const dmyMatch = trimmed.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  if (dmyMatch) {
+    const p1 = parseInt(dmyMatch[1], 10);
+    const p2 = parseInt(dmyMatch[2], 10);
+    const year = dmyMatch[3];
+    let d = p1;
+    let m = p2;
+    if (p2 > 12 && p1 <= 12) {
+      d = p2;
+      m = p1;
+    }
+    return `${year}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  }
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toISOString().split('T')[0];
+  }
+  return null;
+}
+
 export function getGenderDistribution(employees: Employee[]) {
   const active = employees.filter(isEmployeeActive);
   const total = active.length || 1;

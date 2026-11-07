@@ -58,6 +58,7 @@ import {
   fetchAttendanceFromCloud,
   subscribeAttendanceFromCloud,
   saveAttendanceToCloud,
+  saveAttendanceBatchToCloud,
   fetchSeparationsFromCloud,
   subscribeSeparationsFromCloud,
   saveSeparationToCloud,
@@ -323,18 +324,40 @@ export default function App() {
     const unsubTimesheets = subscribeTimesheetsFromCloud((cloudTs) => {
       if (!isMounted) return;
       if (cloudTs && cloudTs.length > 0) {
-        setTimesheets(cloudTs);
-        saveToStorage(STORAGE_KEYS.TIMESHEETS, cloudTs);
+        setTimesheets((prev) => {
+          const map = new Map<string, TimesheetEntry>();
+          prev.forEach((t) => { if (t && t.id) map.set(t.id, t); });
+          cloudTs.forEach((t) => { if (t && t.id) map.set(t.id, t); });
+          const merged = Array.from(map.values());
+          saveToStorage(STORAGE_KEYS.TIMESHEETS, merged);
+          return merged;
+        });
         setSyncStatus('synced');
       }
     });
 
-    // 3. Live subscribe to Daily Attendance
+    // 3. Live subscribe to Daily Attendance (Merge preserving all local/imported punches)
     const unsubAttendance = subscribeAttendanceFromCloud((cloudAtt) => {
       if (!isMounted) return;
       if (cloudAtt && cloudAtt.length > 0) {
-        setAttendance(cloudAtt);
-        saveToStorage(STORAGE_KEYS.ATTENDANCE, cloudAtt);
+        setAttendance((prev) => {
+          const map = new Map<string, AttendanceRecord>();
+          prev.forEach((rec) => {
+            if (rec && rec.employeeId && rec.date) {
+              const key = `${rec.employeeId.trim()}_${rec.date.trim()}`;
+              map.set(key, rec);
+            }
+          });
+          cloudAtt.forEach((rec) => {
+            if (rec && rec.employeeId && rec.date) {
+              const key = `${rec.employeeId.trim()}_${rec.date.trim()}`;
+              map.set(key, rec);
+            }
+          });
+          const merged = Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
+          saveToStorage(STORAGE_KEYS.ATTENDANCE, merged);
+          return merged;
+        });
         setSyncStatus('synced');
       }
     });
@@ -867,20 +890,30 @@ export default function App() {
 
   const handleImportAttendanceRecords = (importedRecords: AttendanceRecord[]) => {
     if (!importedRecords || importedRecords.length === 0) return;
+    
+    // 1. Immediately and synchronously merge into local state and localStorage
     setAttendance((prev) => {
       const map = new Map<string, AttendanceRecord>();
       prev.forEach((rec) => {
-        const key = `${rec.employeeId}_${rec.date}`;
-        map.set(key, rec);
+        if (rec && rec.employeeId && rec.date) {
+          const key = `${rec.employeeId.trim()}_${rec.date.trim()}`;
+          map.set(key, rec);
+        }
       });
       importedRecords.forEach((rec) => {
-        const key = `${rec.employeeId}_${rec.date}`;
-        map.set(key, rec);
-        saveAttendanceToCloud(rec);
+        if (rec && rec.employeeId && rec.date) {
+          const key = `${rec.employeeId.trim()}_${rec.date.trim()}`;
+          map.set(key, rec);
+        }
       });
       const merged = Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
       saveToStorage(STORAGE_KEYS.ATTENDANCE, merged);
       return merged;
+    });
+
+    // 2. Perform atomic batch write to cloud in the background
+    saveAttendanceBatchToCloud(importedRecords).catch((err) => {
+      console.warn('Batch attendance save error:', err);
     });
 
     // Auto-sync / generate corresponding TimesheetEntry records for imported employees
@@ -1432,6 +1465,7 @@ export default function App() {
                 holidays={holidays}
                 onAddTimesheet={handleAddTimesheet}
                 onUpdateTimesheet={handleUpdateTimesheet}
+                onImportAttendanceRecords={handleImportAttendanceRecords}
               />
             )}
 

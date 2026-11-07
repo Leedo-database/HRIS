@@ -330,9 +330,33 @@ export function subscribeAttendanceFromCloud(onData: (attendance: AttendanceReco
 export async function saveAttendanceToCloud(record: AttendanceRecord): Promise<void> {
   try {
     if (!isValidLeedoStaffId(record.employeeId)) return;
-    await setDoc(doc(db, 'attendance', record.id), record, { merge: true });
+    const docId = record.id || `ATT-BIO-${record.employeeId}-${(record.date || '').replace(/-/g, '')}`;
+    const cleanRecord = JSON.parse(JSON.stringify(record));
+    await setDoc(doc(db, 'attendance', docId), cleanRecord, { merge: true });
   } catch (err) {
     console.warn('Failed to save attendance to cloud:', err);
+  }
+}
+
+export async function saveAttendanceBatchToCloud(records: AttendanceRecord[]): Promise<void> {
+  try {
+    const valid = records.filter((r) => r && isValidLeedoStaffId(r.employeeId));
+    if (valid.length === 0) return;
+
+    // Commit in chunks of 350 docs (Firestore batch limit is 500)
+    for (let i = 0; i < valid.length; i += 350) {
+      const batch = writeBatch(db);
+      const chunk = valid.slice(i, i + 350);
+      chunk.forEach((rec) => {
+        const docId = rec.id || `ATT-BIO-${rec.employeeId}-${(rec.date || '').replace(/-/g, '')}`;
+        const cleanRec = JSON.parse(JSON.stringify(rec));
+        const docRef = doc(db, 'attendance', docId);
+        batch.set(docRef, cleanRec, { merge: true });
+      });
+      await batch.commit();
+    }
+  } catch (err) {
+    console.warn('Failed to save attendance batch to cloud:', err);
   }
 }
 

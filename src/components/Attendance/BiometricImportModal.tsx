@@ -47,10 +47,14 @@ export interface ParsedAttendanceRow {
 
 // Known Enroll No. mapping for LEEDO staff based on the official biometric machine config
 // Known Enroll No. mapping for LEEDO staff based on the official biometric machine config
+// Known Enroll No. mapping for LEEDO staff based on the official biometric machine config
 const KNOWN_ENROLL_MAP: Record<string, string> = {
+  '1': '1001', // Forhad Hossain
   '2': '1002', // Murshida Akhter Kanta
-  '3': '1004', // Md. Habibur Rahman
+  '3': '1004', // Md. Habibur Rahman (Biometric Enroll 3)
   '4': '1005', // Md. Belal Hossain
+  '7': '1007', // Athui Marma
+  '9': '1009', // Rone Ahammed
   '10': '1010', // Rayhan
   '13': '1013', // Md. Sohel Rana (Peace Home)
   '14': '1014', // Tania Akter (Peace Home)
@@ -59,6 +63,11 @@ const KNOWN_ENROLL_MAP: Record<string, string> = {
   '19': '1019', // Farhana
   '25': '1025', // A.K.M. Mizanur Rahman
   '27': '1027', // Fabiha Mustari
+  '57': '1057', // Md Omar Faruque
+  '67': '1067', // Md. Rayhan Khan Hira
+  '90': '1090', // Fabiha Mahfuz
+  '100': '1100', // Toufiq Ahmed
+  '1100': '1100', // Toufiq Ahmed
 };
 
 export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
@@ -76,6 +85,7 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
   const [ocrStatusMessage, setOcrStatusMessage] = useState<string>('');
   const [tableFilter, setTableFilter] = useState<'all' | 'late' | 'ontime' | 'unmatched'>('all');
   const [hasParsed, setHasParsed] = useState(false);
+  const [importSuccessMessage, setImportSuccessMessage] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -92,45 +102,107 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
       return undefined;
     }
 
-    // 1. Explicit Peace Home & Staff Nickname / Variant Name Direct Mapping
-    if (cleanName.includes('sohel') || cleanName.includes('rana') || cleanName.includes('সোহেল')) {
-      const match = employees.find((e) => e.id === '1013');
-      if (match) return match;
-    }
-    if (cleanName.includes('tania') || cleanName.includes('তানিয়া') || cleanName.includes('তানিয়া')) {
-      const match = employees.find((e) => e.id === '1014');
-      if (match) return match;
-    }
-    if (cleanName.includes('parvin') || cleanName.includes('pervin') || cleanName.includes('পারভিন') || cleanName.includes('পারভীন')) {
-      const match = employees.find((e) => e.id === '1015');
-      if (match) return match;
-    }
-    if (cleanName.includes('vulu') || cleanName.includes('bulu') || cleanName.includes('ভুলু') || cleanName.includes('বুলু') || cleanName.includes('mollik') || cleanName.includes('মল্লিক')) {
-      const match = employees.find((e) => e.id === '1016');
-      if (match) return match;
-    }
-
-    // 2. By Employee ID exact match (e.g. 1002, 1004, 1013, 1014, 1015, 1016, 1057, 1067, 1075, 1079, 1089, 1090, 1100)
+    // 1. EXACT LEEDO EMPLOYEE ID MATCH FIRST (Highest Priority: e.g. 1030, 1015, 1004, 1044, 1079, 1100)
     if (cleanNo) {
-      const matchById = employees.find((e) => e.id === cleanNo || e.id === `10${cleanNo.padStart(2, '0')}`);
+      const matchById = employees.find((e) => e.id.trim() === cleanNo);
       if (matchById) return matchById;
     }
 
-    // 3. By known Enroll No. mapping (for legacy 1-2 digit enroll numbers)
+    // 2. Machine Enroll Shortcut Mapping for 1-2 digit machine enroll numbers
     if (cleanNo && KNOWN_ENROLL_MAP[cleanNo]) {
       const targetId = KNOWN_ENROLL_MAP[cleanNo];
-      const match = employees.find((e) => e.id === targetId);
+      const match = employees.find((e) => e.id.trim() === targetId);
       if (match) return match;
     }
 
-    // 4. By Name substring / fuzzy matching
+    // 3. Exact Normalized Full Name Match
     if (cleanName && cleanName.length >= 3) {
+      const normalize = (s: string) => s.toLowerCase().replace(/^(md\.|mst\.|mr\.|mrs\.)\s*/, '').replace(/[\s.]+/g, ' ').trim();
+      const normInput = normalize(cleanName);
+
+      const exactNameMatch = employees.find((e) => {
+        const normFull = normalize(e.fullName);
+        return normFull === normInput;
+      });
+      if (exactNameMatch) return exactNameMatch;
+
+      // 4. Disambiguated Name Matching (Specific full names and distinctive first names)
+      if (cleanName.includes('shahnaz') || cleanName.includes('শাহনাজ')) {
+        const match = employees.find((e) => e.id === '1030');
+        if (match) return match;
+      }
+      if (cleanName.includes('rehana') || cleanName.includes('রেহানা')) {
+        const match = employees.find((e) => e.id === '1044');
+        if (match) return match;
+      }
+      if (cleanName.includes('parvin akter') || cleanName.includes('pervin akter') || cleanName === 'parvin' || cleanName === 'pervin' || cleanName === 'পারভিন' || cleanName === 'পারভীন' || cleanName.includes('পারভিন আক্তার') || cleanName.includes('পারভীন আক্তার')) {
+        const match = employees.find((e) => e.id === '1015');
+        if (match) return match;
+      }
+      if (cleanName.includes('tania akter') || cleanName.includes('তানিয়া আক্তার') || cleanName === 'tania' || cleanName === 'তানিয়া') {
+        const match = employees.find((e) => e.id === '1014');
+        if (match) return match;
+      }
+      if (cleanName.includes('tania sultana') || cleanName.includes('তানিয়া সুলতানা')) {
+        const match = employees.find((e) => e.id === '1035');
+        if (match) return match;
+      }
+      if (cleanName.includes('sohel') || cleanName.includes('সোহেল')) {
+        const match = employees.find((e) => e.id === '1013');
+        if (match) return match;
+      }
+      if (cleanName.includes('vulu') || cleanName.includes('bulu') || cleanName.includes('ভুলু') || cleanName.includes('বুলু') || cleanName.includes('mollik') || cleanName.includes('মল্লিক')) {
+        const match = employees.find((e) => e.id === '1016');
+        if (match) return match;
+      }
+      if (cleanName.includes('habib') || cleanName.includes('হাবিব') || cleanName.includes('habibur')) {
+        const match = employees.find((e) => e.id === '1004');
+        if (match) return match;
+      }
+      if (cleanName.includes('rone') || cleanName.includes('রনে') || cleanName.includes('roni') || cleanName.includes('রনি')) {
+        const match = employees.find((e) => e.id === '1009');
+        if (match) return match;
+      }
+      if (cleanName.includes('toufiq') || cleanName.includes('tawfiq') || cleanName.includes('taufiq') || cleanName.includes('তৌফিক')) {
+        const match = employees.find((e) => e.id === '1100');
+        if (match) return match;
+      }
+      if (cleanName.includes('kanta') || cleanName.includes('কাস্তা') || cleanName.includes('মুর্শিদা')) {
+        const match = employees.find((e) => e.id === '1002');
+        if (match) return match;
+      }
+      if (cleanName.includes('faruque') || cleanName.includes('faruk') || cleanName.includes('ফারুক')) {
+        const match = employees.find((e) => e.id === '1057');
+        if (match) return match;
+      }
+      if (cleanName.includes('forhad') || cleanName.includes('farhad') || cleanName.includes('ফরহাদ')) {
+        const match = employees.find((e) => e.id === '1001');
+        if (match) return match;
+      }
+      if (cleanName.includes('athui') || cleanName.includes('marma') || cleanName.includes('আথুই')) {
+        const match = employees.find((e) => e.id === '1007');
+        if (match) return match;
+      }
+      if (cleanName.includes('sazzad') || cleanName.includes('সাজ্জাদ')) {
+        const match = employees.find((e) => e.id === '1079');
+        if (match) return match;
+      }
+
+      // 5. Distinct token match (excluding common Bengali surnames)
+      const commonWords = new Set(['md', 'mst', 'mr', 'mrs', 'akter', 'akhter', 'begum', 'khatun', 'rahman', 'hossain', 'hossen', 'mia', 'ahmed', 'ahammed', 'khan', 'alam', 'islam']);
+      const tokens = cleanName.split(/[\s.]+/).filter((p) => p.length >= 3 && !commonWords.has(p));
+      if (tokens.length > 0) {
+        const tokenMatch = employees.find((e) => {
+          const empNorm = e.fullName.toLowerCase();
+          return tokens.some((t) => empNorm.includes(t));
+        });
+        if (tokenMatch) return tokenMatch;
+      }
+
+      // 6. Substring match fallback
       const matchName = employees.find((e) => {
         const full = e.fullName.toLowerCase();
-        if (full.includes(cleanName) || cleanName.includes(full)) return true;
-        // Parts matching: e.g. "Habibur" in "Md. Habibur Rahman", "Omar Faruque" in "Md Omar Faruque"
-        const cleanParts = cleanName.split(/[\s.]+/).filter((p) => p.length > 2);
-        return cleanParts.some((part) => full.includes(part));
+        return full.includes(cleanName) || cleanName.includes(full);
       });
       if (matchName) return matchName;
     }
@@ -138,12 +210,12 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
     return undefined;
   };
 
-  // Helper: Parse DD/MM/YYYY HH:mm:ss or YYYY-MM-DD HH:mm:ss accurately
+  // Helper: Parse DD/MM/YYYY HH:mm:ss, MM/DD/YYYY, or YYYY-MM-DD HH:mm:ss accurately with 12h/24h support
   const parseDateTimeString = (raw: string): { dateStr: string; timeStr: string } | null => {
     if (!raw) return null;
     const clean = raw.trim();
-    // Matches DD/MM/YYYY HH:mm:ss or YYYY-MM-DD HH:mm:ss
-    const match = clean.match(/^(\d{1,4})[-/.](\d{1,2})[-/.](\d{1,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+    // Matches DD/MM/YYYY HH:mm:ss, YYYY-MM-DD HH:mm:ss, with optional AM/PM
+    const match = clean.match(/^(\d{1,4})[-/.](\d{1,2})[-/.](\d{1,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?)?/i);
     if (!match) return null;
 
     let y: number;
@@ -155,10 +227,28 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
     const p3 = parseInt(match[3], 10);
 
     if (match[3].length === 4) {
-      // Format: DD/MM/YYYY (Standard in Bangladesh / UK / biometric exports)
-      d = p1;
-      m = p2;
       y = p3;
+      // If p1 > 12, p1 is day, p2 is month (e.g. 24/10/2026)
+      // If p2 > 12, p2 is day, p1 is month (e.g. 10/24/2026)
+      if (p1 > 12) {
+        d = p1;
+        m = p2;
+      } else if (p2 > 12) {
+        d = p2;
+        m = p1;
+      } else if (p2 === 10 && p1 !== 10) {
+        // In October context: 12/10/2026 -> 12 is Day, 10 is Month
+        d = p1;
+        m = p2;
+      } else if (p1 === 10 && p2 !== 10) {
+        // 10/12/2026 where p1 is October -> 10 is Month, 12 is Day
+        d = p2;
+        m = p1;
+      } else {
+        // Standard Bangladesh / British format: DD/MM/YYYY
+        d = p1;
+        m = p2;
+      }
     } else if (match[1].length === 4) {
       // Format: YYYY-MM-DD
       y = p1;
@@ -174,10 +264,13 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
     const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
     let timeStr = '10:00:00';
     if (match[4] !== undefined && match[5] !== undefined) {
-      const hh = String(match[4]).padStart(2, '0');
+      let hh = parseInt(match[4], 10);
       const mm = String(match[5]).padStart(2, '0');
       const ss = match[6] !== undefined ? String(match[6]).padStart(2, '0') : '00';
-      timeStr = `${hh}:${mm}:${ss}`;
+      const ampm = (match[7] || '').toLowerCase();
+      if (ampm === 'pm' && hh < 12) hh += 12;
+      if (ampm === 'am' && hh === 12) hh = 0;
+      timeStr = `${String(hh).padStart(2, '0')}:${mm}:${ss}`;
     }
 
     return { dateStr, timeStr };
@@ -313,12 +406,13 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
 
           // Name token (alphabetic string)
           if (!foundName && !['office', 'headoffice', 'station', 'dept', 'fp', 'workcode'].includes(colLower)) {
-            const potentialEmp = findMatchingEmployee('', colClean);
-            if (potentialEmp) {
-              foundName = potentialEmp.fullName;
-              if (!foundNo) foundNo = potentialEmp.id;
-            } else if (/[a-zA-Z\u0980-\u09FF]{3,}/.test(colClean)) {
+            if (/[a-zA-Z\u0980-\u09FF]{3,}/.test(colClean)) {
               foundName = colClean;
+              const potentialEmp = findMatchingEmployee(foundNo, colClean);
+              if (potentialEmp) {
+                foundName = potentialEmp.fullName;
+                if (!foundNo) foundNo = potentialEmp.id;
+              }
             }
           }
         }
@@ -339,20 +433,25 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
         foundTimes.push('10:00:00');
       }
 
-      // Group key: combination of ID/Name and Date
-      const groupKey = `${foundNo || foundName || 'unknown'}_${foundDate}`;
+      // Resolve employee match immediately so that all punches for this employee on this date group together!
+      const matchedEmpForRow = findMatchingEmployee(foundNo, foundName);
+      const effectiveEmpId = matchedEmpForRow ? matchedEmpForRow.id : (foundNo || foundName || 'unknown');
+      const effectiveEmpName = matchedEmpForRow ? matchedEmpForRow.fullName : (foundName || 'Unknown');
+
+      // Group key: combination of matched Employee ID and Date
+      const groupKey = `${effectiveEmpId}_${foundDate}`;
       if (!punchMap.has(groupKey)) {
         punchMap.set(groupKey, {
-          rawNo: foundNo,
-          rawName: foundName,
+          rawNo: matchedEmpForRow ? matchedEmpForRow.id : foundNo,
+          rawName: effectiveEmpName,
           date: foundDate,
           times: [...foundTimes],
           rawStatus: foundStatus,
         });
       } else {
         const existing = punchMap.get(groupKey)!;
-        if (!existing.rawName && foundName) existing.rawName = foundName;
-        if (!existing.rawNo && foundNo) existing.rawNo = foundNo;
+        if (!existing.rawName && effectiveEmpName) existing.rawName = effectiveEmpName;
+        if (!existing.rawNo && matchedEmpForRow) existing.rawNo = matchedEmpForRow.id;
         existing.times.push(...foundTimes);
       }
     }
@@ -535,7 +634,7 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
   const handleExecuteImport = () => {
     const validRows = parsedRows.filter((r) => r.isValid && r.matchedEmployee);
     if (validRows.length === 0) {
-      alert('No valid rows found to import.');
+      setOcrStatusMessage('No valid matched staff rows to import.');
       return;
     }
 
@@ -543,12 +642,12 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
       const emp = r.matchedEmployee!;
       const station = emp.workStation || 'Head Office';
       return {
-        id: `ATT-BIO-${r.normalizedDate.replace(/-/g, '')}-${emp.id}-${Date.now().toString().slice(-4)}`,
+        id: `ATT-BIO-${emp.id}-${r.normalizedDate.replace(/-/g, '')}`,
         employeeId: emp.id,
         employeeName: emp.fullName,
         date: r.normalizedDate,
         clockInTime: r.clockInTime,
-        clockOutTime: r.clockOutTime,
+        clockOutTime: r.clockOutTime || '',
         workMode: 'Office',
         status: r.status,
         punchLocationName: station,
@@ -561,8 +660,10 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
     });
 
     onImportRecords(newAttendanceRecords);
-    alert(`সফলভাবে ${newAttendanceRecords.length}টি বায়োমেট্রিক উপস্থিতি রেকর্ড ইমপোর্ট হয়েছে! এটি সরাসরি Attendance এবং Timesheet (টাইমশীট)-এ আপডেট হয়ে গেছে।`);
-    onClose();
+    setImportSuccessMessage(`সফলভাবে ${newAttendanceRecords.length}টি বায়োমেট্রিক উপস্থিতি রেকর্ড সেভ ও সিঙ্ক হয়েছে! এটি সরাসরি Attendance এবং Timesheet-এ লোড হয়ে গেছে।`);
+    setTimeout(() => {
+      onClose();
+    }, 1200);
   };
 
   const matchedCount = parsedRows.filter((r) => r.isValid).length;
@@ -607,6 +708,13 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {importSuccessMessage && (
+          <div className="bg-emerald-600 text-white p-3.5 px-5 flex items-center gap-2.5 text-xs font-bold animate-fadeIn">
+            <Check className="w-5 h-5 text-emerald-100 shrink-0" />
+            <span>{importSuccessMessage}</span>
+          </div>
+        )}
 
         {/* Source Mode Selector Tabs */}
         <div className="bg-slate-50 border-b border-slate-200 px-5 pt-3 flex flex-wrap gap-2">
