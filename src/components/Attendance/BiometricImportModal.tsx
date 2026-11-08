@@ -22,6 +22,7 @@ import {
   FileCheck2
 } from 'lucide-react';
 import { UPLOADED_SHEET_RAW_CSV } from '../../data/sampleFingerprintLogs';
+import { parseTimeToMinutes } from '../../utils/calculations';
 
 interface BiometricImportModalProps {
   isOpen: boolean;
@@ -211,7 +212,7 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
   };
 
   // Helper: Parse DD/MM/YYYY HH:mm:ss, MM/DD/YYYY, or YYYY-MM-DD HH:mm:ss accurately with 12h/24h support
-  const parseDateTimeString = (raw: string): { dateStr: string; timeStr: string } | null => {
+  const parseDateTimeString = (raw: string): { dateStr: string; timeStr: string | null } | null => {
     if (!raw) return null;
     const clean = raw.trim();
     // Matches DD/MM/YYYY HH:mm:ss, YYYY-MM-DD HH:mm:ss, with optional AM/PM
@@ -262,7 +263,7 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
     }
 
     const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    let timeStr = '10:00:00';
+    let timeStr: string | null = null;
     if (match[4] !== undefined && match[5] !== undefined) {
       let hh = parseInt(match[4], 10);
       const mm = String(match[5]).padStart(2, '0');
@@ -276,23 +277,38 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
     return { dateStr, timeStr };
   };
 
+  // Helper to normalize any raw time token (e.g. "09:53", "9:53", "18:12", "6:12 PM") to "HH:mm:ss"
+  const normalizeTimeToken = (str: string | undefined | null): string | null => {
+    if (!str) return null;
+    const clean = str.trim();
+    if (!clean || clean === '--' || clean === '-') return null;
+    const match = clean.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*(am|pm))?$/i);
+    if (!match) return null;
+    let hh = parseInt(match[1], 10);
+    const mm = match[2];
+    const ss = match[3] ? match[3] : '00';
+    const ampm = (match[4] || '').toLowerCase();
+    if (ampm === 'pm' && hh < 12) hh += 12;
+    if (ampm === 'am' && hh === 12) hh = 0;
+    return `${String(hh).padStart(2, '0')}:${mm}:${ss}`;
+  };
+
   // Tokenize line across tabs, commas, semicolons, pipes, or multiple spaces
   const tokenizeLine = (line: string): string[] => {
-    const trimmed = line.trim();
-    if (!trimmed) return [];
-    if (trimmed.includes('\t')) {
-      return trimmed.split('\t').map((c) => c.replace(/^["'\s]+|["'\s]+$/g, '').trim());
+    if (!line) return [];
+    if (line.includes('\t')) {
+      return line.split('\t').map((c) => c.replace(/^["'\s]+|["'\s]+$/g, '').trim());
     }
-    if (trimmed.includes(',')) {
-      return trimmed.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map((c) => c.replace(/^["'\s]+|["'\s]+$/g, '').trim());
+    if (line.includes(',')) {
+      return line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map((c) => c.replace(/^["'\s]+|["'\s]+$/g, '').trim());
     }
-    if (trimmed.includes(';')) {
-      return trimmed.split(';').map((c) => c.replace(/^["'\s]+|["'\s]+$/g, '').trim());
+    if (line.includes(';')) {
+      return line.split(';').map((c) => c.replace(/^["'\s]+|["'\s]+$/g, '').trim());
     }
-    if (trimmed.includes('|')) {
-      return trimmed.split('|').map((c) => c.replace(/^["'\s]+|["'\s]+$/g, '').trim());
+    if (line.includes('|')) {
+      return line.split('|').map((c) => c.replace(/^["'\s]+|["'\s]+$/g, '').trim());
     }
-    return trimmed.split(/\s{2,}/).map((c) => c.replace(/^["'\s]+|["'\s]+$/g, '').trim());
+    return line.trim().split(/\s{2,}/).map((c) => c.replace(/^["'\s]+|["'\s]+$/g, '').trim());
   };
 
   // Universal Biometric Machine Log Parser
@@ -316,6 +332,8 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
       rawNo: string;
       rawName: string;
       date: string;
+      clockIn?: string;
+      clockOut?: string;
       times: string[];
       rawStatus?: string;
     }>();
@@ -343,6 +361,8 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
       let foundNo = '';
       let foundName = '';
       let foundStatus = '';
+      let explicitIn: string | undefined = undefined;
+      let explicitOut: string | undefined = undefined;
 
       // Pattern 1: Exact 7-column Excel export as in image_646b12ac.png
       // Col 0: Department (e.g. Office)
@@ -358,64 +378,110 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
       if (dateTimeParsedCol2 && isIdCol4) {
         foundName = cols[1].trim();
         foundDate = dateTimeParsedCol2.dateStr;
-        foundTimes.push(dateTimeParsedCol2.timeStr);
+        if (dateTimeParsedCol2.timeStr) {
+          foundTimes.push(dateTimeParsedCol2.timeStr);
+        }
         foundStatus = cols[3]?.trim() || 'C/In';
         foundNo = cols[4].trim();
       } else {
-        // Pattern 2: Dynamic token extraction for varied CSV, Excel, or PDF extracted text
-        for (const col of cols) {
-          const colClean = col.trim();
-          if (!colClean) continue;
+        // Pattern 2: Roster Table with separate In and Out columns (e.g. Name \t Date \t In \t Out or ID \t Name \t Date \t In \t Out)
+        let tableDateIdx = -1;
+        let tableDateStr = '';
+        for (let c = 0; c < Math.min(cols.length, 3); c++) {
+          const dt = parseDateTimeString(cols[c]);
+          if (dt && !cols[c].includes(':')) {
+            tableDateIdx = c;
+            tableDateStr = dt.dateStr;
+            break;
+          }
+        }
 
-          // Combined Date & Time token
-          const dt = parseDateTimeString(colClean);
-          if (dt && colClean.includes(':') && !foundDate) {
-            foundDate = dt.dateStr;
-            foundTimes.push(dt.timeStr);
-            continue;
+        if (tableDateIdx !== -1 && cols.length >= tableDateIdx + 2) {
+          // Identify Name and/or ID before tableDateIdx
+          for (let c = 0; c < tableDateIdx; c++) {
+            const val = cols[c].trim();
+            if (!val) continue;
+            if (/^\d{1,6}$/.test(val) && !foundNo) {
+              foundNo = val;
+            } else if (!foundName) {
+              foundName = val;
+            }
           }
 
-          // Pure Date token without time
-          if (dt && !colClean.includes(':') && !foundDate) {
-            foundDate = dt.dateStr;
-            continue;
-          }
+          foundDate = tableDateStr;
+          const inVal = normalizeTimeToken(cols[tableDateIdx + 1]);
+          const outVal = normalizeTimeToken(cols[tableDateIdx + 2]);
 
-          // Pure time token (HH:mm:ss)
-          const timeMatch = colClean.match(/^(\d{1,2}:\d{2}(?::\d{2})?)$/);
-          if (timeMatch) {
-            foundTimes.push(timeMatch[1]);
-            continue;
+          if (inVal) {
+            explicitIn = inVal;
+            foundTimes.push(inVal);
           }
-
-          // Status keywords
-          const colLower = colClean.toLowerCase();
-          if (['c/in', 'c/out', 'in', 'out', 'late', 'present', 'absent'].includes(colLower)) {
-            foundStatus = colClean;
-            continue;
+          if (outVal) {
+            explicitOut = outVal;
+            foundTimes.push(outVal);
           }
+        } else {
+          // Pattern 3: Dynamic token extraction for varied CSV, Excel, or PDF extracted text
+          for (const col of cols) {
+            const colClean = col.trim();
+            if (!colClean) continue;
 
-          // Machine Enroll No / Staff ID
-          if (/^\d{3,6}$/.test(colClean) && !foundNo) {
-            foundNo = colClean;
-            continue;
-          } else if (/^\d{1,2}$/.test(colClean) && !foundNo && colClean !== '0') {
-            foundNo = colClean;
-            continue;
-          }
+            // Combined Date & Time token
+            const dt = parseDateTimeString(colClean);
+            if (dt && colClean.includes(':') && !foundDate) {
+              foundDate = dt.dateStr;
+              if (dt.timeStr) foundTimes.push(dt.timeStr);
+              continue;
+            }
 
-          // Name token (alphabetic string)
-          if (!foundName && !['office', 'headoffice', 'station', 'dept', 'fp', 'workcode'].includes(colLower)) {
-            if (/[a-zA-Z\u0980-\u09FF]{3,}/.test(colClean)) {
-              foundName = colClean;
-              const potentialEmp = findMatchingEmployee(foundNo, colClean);
-              if (potentialEmp) {
-                foundName = potentialEmp.fullName;
-                if (!foundNo) foundNo = potentialEmp.id;
+            // Pure Date token without time
+            if (dt && !colClean.includes(':') && !foundDate) {
+              foundDate = dt.dateStr;
+              continue;
+            }
+
+            // Pure time token (HH:mm:ss or H:mm:ss or H:mm)
+            const normalizedTime = normalizeTimeToken(colClean);
+            if (normalizedTime) {
+              foundTimes.push(normalizedTime);
+              continue;
+            }
+
+            // Status keywords
+            const colLower = colClean.toLowerCase();
+            if (['c/in', 'c/out', 'in', 'out', 'late', 'present', 'absent'].includes(colLower)) {
+              foundStatus = colClean;
+              continue;
+            }
+
+            // Machine Enroll No / Staff ID
+            if (/^\d{3,6}$/.test(colClean) && !foundNo) {
+              foundNo = colClean;
+              continue;
+            } else if (/^\d{1,2}$/.test(colClean) && !foundNo && colClean !== '0') {
+              foundNo = colClean;
+              continue;
+            }
+
+            // Name token (alphabetic string)
+            if (!foundName && !['office', 'headoffice', 'station', 'dept', 'fp', 'workcode'].includes(colLower)) {
+              if (/[a-zA-Z\u0980-\u09FF]{3,}/.test(colClean)) {
+                foundName = colClean;
+                const potentialEmp = findMatchingEmployee(foundNo, colClean);
+                if (potentialEmp) {
+                  foundName = potentialEmp.fullName;
+                  if (!foundNo) foundNo = potentialEmp.id;
+                }
               }
             }
           }
         }
+      }
+
+      // If no punch times were found on this date (e.g. employee was absent or on weekend/holiday without punch):
+      // CRITICAL: DO NOT create a dummy punch! Skip this row completely so empty dates are not falsely imported!
+      if (foundTimes.length === 0) {
+        continue;
       }
 
       // If we found an ID and name is empty, auto-lookup from employee database
@@ -427,10 +493,6 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
       // Default date to current date if missing
       if (!foundDate) {
         foundDate = new Date().toISOString().split('T')[0];
-      }
-
-      if (foundTimes.length === 0) {
-        foundTimes.push('10:00:00');
       }
 
       // Resolve employee match immediately so that all punches for this employee on this date group together!
@@ -445,6 +507,8 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
           rawNo: matchedEmpForRow ? matchedEmpForRow.id : foundNo,
           rawName: effectiveEmpName,
           date: foundDate,
+          clockIn: explicitIn,
+          clockOut: explicitOut,
           times: [...foundTimes],
           rawStatus: foundStatus,
         });
@@ -452,6 +516,24 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
         const existing = punchMap.get(groupKey)!;
         if (!existing.rawName && effectiveEmpName) existing.rawName = effectiveEmpName;
         if (!existing.rawNo && matchedEmpForRow) existing.rawNo = matchedEmpForRow.id;
+        if (explicitIn) {
+          if (!existing.clockIn) {
+            existing.clockIn = explicitIn;
+          } else {
+            const m1 = parseTimeToMinutes(existing.clockIn) ?? 9999;
+            const m2 = parseTimeToMinutes(explicitIn) ?? 9999;
+            if (m2 < m1) existing.clockIn = explicitIn;
+          }
+        }
+        if (explicitOut) {
+          if (!existing.clockOut) {
+            existing.clockOut = explicitOut;
+          } else {
+            const m1 = parseTimeToMinutes(existing.clockOut) ?? 0;
+            const m2 = parseTimeToMinutes(explicitOut) ?? 0;
+            if (m2 > m1) existing.clockOut = explicitOut;
+          }
+        }
         existing.times.push(...foundTimes);
       }
     }
@@ -459,17 +541,42 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
     // Convert grouped punches into structured rows
     const results: ParsedAttendanceRow[] = [];
     punchMap.forEach((entry) => {
-      // Sort times chronologically
-      const sortedTimes = [...entry.times].sort();
-      const clockIn = sortedTimes[0] || '10:00:00';
-      const clockOut = sortedTimes.length > 1 ? sortedTimes[sortedTimes.length - 1] : undefined;
+      // 1. Resolve clockIn and clockOut
+      let clockIn = entry.clockIn;
+      let clockOut = entry.clockOut;
 
-      // Calculate worked hours
+      // If explicit In/Out was not provided, derive from sorted punch times
+      if (!clockIn && !clockOut && entry.times.length > 0) {
+        const sortedTimes = [...entry.times].sort((a, b) => {
+          const ma = parseTimeToMinutes(a) ?? 0;
+          const mb = parseTimeToMinutes(b) ?? 0;
+          return ma - mb;
+        });
+
+        if (sortedTimes.length >= 2) {
+          clockIn = sortedTimes[0];
+          clockOut = sortedTimes[sortedTimes.length - 1];
+        } else if (sortedTimes.length === 1) {
+          const t = sortedTimes[0];
+          const tm = parseTimeToMinutes(t) ?? 0;
+          // If after 1:00 PM (13:00 = 780 mins), this single punch is a departure / Clock-Out
+          if (tm > 13 * 60) {
+            clockOut = t;
+            clockIn = '--';
+          } else {
+            clockIn = t;
+          }
+        }
+      }
+
+      if (!clockIn) clockIn = '--';
+
+      // Calculate worked hours accurately
       let hoursWorked = 8.0;
-      if (clockIn && clockOut && clockIn !== clockOut) {
-        const [inH, inM] = clockIn.split(':').map(Number);
-        const [outH, outM] = clockOut.split(':').map(Number);
-        const diffMins = (outH * 60 + (outM || 0)) - (inH * 60 + (inM || 0));
+      if (clockIn && clockOut && clockIn !== '--' && clockOut !== '--' && clockIn !== clockOut) {
+        const inMins = parseTimeToMinutes(clockIn) ?? 600;
+        const outMins = parseTimeToMinutes(clockOut) ?? 1080;
+        const diffMins = outMins - inMins;
         hoursWorked = Math.max(0.5, Math.round((diffMins / 60) * 10) / 10);
       }
 
@@ -478,12 +585,18 @@ export const BiometricImportModal: React.FC<BiometricImportModalProps> = ({
 
       // Late Arrival Detection:
       // Standard shift starts at 10:00 AM with a 15-minute grace period (up to 10:15 AM)
-      const [inH, inM] = clockIn.split(':').map(Number);
-      const totalInMins = (inH || 0) * 60 + (inM || 0);
-      const shiftStartMins = 10 * 60; // 10:00 AM
-      const graceLimitMins = 10 * 60 + 15; // 10:15 AM
-      const isLate = totalInMins > graceLimitMins;
-      const lateMinutes = isLate ? totalInMins - shiftStartMins : 0;
+      // Only applies if an actual morning check-in time was recorded
+      let isLate = false;
+      let lateMinutes = 0;
+      if (clockIn && clockIn !== '--') {
+        const inMins = parseTimeToMinutes(clockIn);
+        if (inMins !== null) {
+          const shiftStartMins = 10 * 60; // 10:00 AM
+          const graceLimitMins = 10 * 60 + 15; // 10:15 AM
+          isLate = inMins > graceLimitMins;
+          lateMinutes = isLate ? inMins - shiftStartMins : 0;
+        }
+      }
 
       let status: 'Present' | 'Late' | 'Absent' | 'Field Mission' = isLate ? 'Late' : 'Present';
       if (entry.rawStatus && entry.rawStatus.toLowerCase().includes('absent')) {

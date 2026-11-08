@@ -19,7 +19,7 @@ import {
   GovernmentHoliday
 } from './types/hris';
 import { OFFICIAL_BANGLADESH_HOLIDAYS_2026 } from './data/bangladeshHolidays';
-import { getMonthHolidayMetrics, isEmployeeActive } from './utils/calculations';
+import { getMonthHolidayMetrics, isEmployeeActive, mergeAttendanceRecords } from './utils/calculations';
 import { 
   INITIAL_COMPANY_PROFILE, 
   INITIAL_EMPLOYEES, 
@@ -351,7 +351,11 @@ export default function App() {
           cloudAtt.forEach((rec) => {
             if (rec && rec.employeeId && rec.date) {
               const key = `${rec.employeeId.trim()}_${rec.date.trim()}`;
-              map.set(key, rec);
+              if (map.has(key)) {
+                map.set(key, mergeAttendanceRecords(map.get(key)!, rec));
+              } else {
+                map.set(key, rec);
+              }
             }
           });
           const merged = Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
@@ -873,25 +877,52 @@ export default function App() {
   };
 
   const handleAddAttendance = (rec: AttendanceRecord) => {
-    const updated = [rec, ...attendance];
-    setAttendance(updated);
-    saveToStorage(STORAGE_KEYS.ATTENDANCE, updated);
-    saveAttendanceToCloud(rec);
-    syncAttendanceRecordToWeeklyTimesheet(rec);
+    let finalRec = rec;
+    setAttendance((prev) => {
+      const idx = prev.findIndex(
+        (a) => a.employeeId?.trim() === rec.employeeId?.trim() && a.date?.trim() === rec.date?.trim()
+      );
+      let updated: AttendanceRecord[];
+      if (idx >= 0) {
+        finalRec = mergeAttendanceRecords(prev[idx], rec);
+        updated = [...prev];
+        updated[idx] = finalRec;
+      } else {
+        updated = [rec, ...prev];
+      }
+      saveToStorage(STORAGE_KEYS.ATTENDANCE, updated);
+      return updated;
+    });
+    saveAttendanceToCloud(finalRec);
+    syncAttendanceRecordToWeeklyTimesheet(finalRec);
   };
 
   const handleUpdateAttendance = (rec: AttendanceRecord) => {
-    const updated = attendance.map((a) => (a.id === rec.id ? rec : a));
-    setAttendance(updated);
-    saveToStorage(STORAGE_KEYS.ATTENDANCE, updated);
-    saveAttendanceToCloud(rec);
-    syncAttendanceRecordToWeeklyTimesheet(rec);
+    let finalRec = rec;
+    setAttendance((prev) => {
+      const idx = prev.findIndex(
+        (a) => a.id === rec.id || (a.employeeId?.trim() === rec.employeeId?.trim() && a.date?.trim() === rec.date?.trim())
+      );
+      let updated: AttendanceRecord[];
+      if (idx >= 0) {
+        finalRec = mergeAttendanceRecords(prev[idx], rec);
+        updated = [...prev];
+        updated[idx] = finalRec;
+      } else {
+        updated = [rec, ...prev];
+      }
+      saveToStorage(STORAGE_KEYS.ATTENDANCE, updated);
+      return updated;
+    });
+    saveAttendanceToCloud(finalRec);
+    syncAttendanceRecordToWeeklyTimesheet(finalRec);
   };
 
   const handleImportAttendanceRecords = (importedRecords: AttendanceRecord[]) => {
     if (!importedRecords || importedRecords.length === 0) return;
     
     // 1. Immediately and synchronously merge into local state and localStorage
+    let mergedAttendanceList: AttendanceRecord[] = [];
     setAttendance((prev) => {
       const map = new Map<string, AttendanceRecord>();
       prev.forEach((rec) => {
@@ -903,16 +934,21 @@ export default function App() {
       importedRecords.forEach((rec) => {
         if (rec && rec.employeeId && rec.date) {
           const key = `${rec.employeeId.trim()}_${rec.date.trim()}`;
-          map.set(key, rec);
+          if (map.has(key)) {
+            // Keep earliest in-time and latest out-time, recalculate hours accurately
+            map.set(key, mergeAttendanceRecords(map.get(key)!, rec));
+          } else {
+            map.set(key, rec);
+          }
         }
       });
-      const merged = Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
-      saveToStorage(STORAGE_KEYS.ATTENDANCE, merged);
-      return merged;
+      mergedAttendanceList = Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
+      saveToStorage(STORAGE_KEYS.ATTENDANCE, mergedAttendanceList);
+      return mergedAttendanceList;
     });
 
-    // 2. Perform atomic batch write to cloud in the background
-    saveAttendanceBatchToCloud(importedRecords).catch((err) => {
+    // 2. Perform atomic batch write to cloud in the background using merged records
+    saveAttendanceBatchToCloud(mergedAttendanceList).catch((err) => {
       console.warn('Batch attendance save error:', err);
     });
 
@@ -1621,6 +1657,13 @@ export default function App() {
                 onUpdateJobLocations={handleUpdateJobLocations}
               />
             )}
+
+            {/* Application Bottom Footer Credit */}
+            <footer className="no-print mt-12 pt-4 pb-2 border-t border-slate-200/80 text-center">
+              <p className="text-[11px] text-slate-400 font-medium tracking-wide">
+                LEEDO HRIS & Payroll Platform • <span className="text-slate-500 font-semibold">Develop by shadowgili</span>
+              </p>
+            </footer>
           </div>
         </main>
       </div>

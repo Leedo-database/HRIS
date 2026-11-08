@@ -28,7 +28,7 @@ import {
   Edit,
   Printer
 } from 'lucide-react';
-import { getTodayAttendanceSummary, getHolidayOnDate } from '../../utils/calculations';
+import { getTodayAttendanceSummary, getHolidayOnDate, mergeAttendanceRecords } from '../../utils/calculations';
 import { GovernmentHoliday } from '../../types/hris';
 import { OFFICIAL_BANGLADESH_HOLIDAYS_2026 } from '../../data/bangladeshHolidays';
 import { BiometricImportModal } from './BiometricImportModal';
@@ -293,7 +293,12 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
         locationAddress: LEEDO_CENTER_COORDINATES[selectedJobLocation]?.address || selectedJobLocation,
       };
 
-      onAddAttendance(newRecord);
+      if (userTodayPunch) {
+        const merged = mergeAttendanceRecords(userTodayPunch, newRecord);
+        onUpdateAttendance(merged);
+      } else {
+        onAddAttendance(newRecord);
+      }
       setLocationNote('');
       setIsLocating(false);
     };
@@ -330,25 +335,23 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
     executePunch(centerInfo.lat, centerInfo.lng, 20, 'Assigned Center Coordinates');
   };
 
-  // Perform Clock Out & calculate actual hours
+  // Perform Clock Out & calculate actual hours, preserving earliest check-in & latest check-out
   const handleClockOut = () => {
     if (!userTodayPunch) return;
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
     
-    // Estimate hours worked safely
-    const inMins = parseTimeToMinutes(userTodayPunch.clockInTime);
-    const outMins = now.getHours() * 60 + now.getMinutes();
-    const diffMins = Math.max(30, outMins - inMins);
-    const calculatedHours = Math.round((diffMins / 60) * 10) / 10;
-
     const updated: AttendanceRecord = {
       ...userTodayPunch,
       clockOutTime: timeStr,
-      hoursWorked: calculatedHours,
+      locationNote: locationNote 
+        ? (userTodayPunch.locationNote ? `${userTodayPunch.locationNote} | Out: ${locationNote}` : locationNote) 
+        : userTodayPunch.locationNote,
     };
 
-    onUpdateAttendance(updated);
+    const merged = mergeAttendanceRecords(userTodayPunch, updated);
+    onUpdateAttendance(merged);
+    setLocationNote('');
   };
 
 
@@ -759,16 +762,27 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
                   )}
                 </div>
 
-                {/* CHECK OUT BUTTON */}
+                {/* CHECK OUT & IN RE-PUNCH OPTIONS */}
                 {!userTodayPunch.clockOutTime ? (
-                  <button
-                    type="button"
-                    onClick={handleClockOut}
-                    className="w-full py-3.5 bg-gradient-to-r from-rose-600 via-rose-700 to-rose-800 hover:from-rose-700 hover:to-rose-900 text-white font-bold rounded-2xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-rose-200 transition-all cursor-pointer active:scale-98"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    <span>Check Out / Clock Out (আজকের ডিউটি শেষ করুন)</span>
-                  </button>
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={handleClockOut}
+                      className="w-full py-3.5 bg-gradient-to-r from-rose-600 via-rose-700 to-rose-800 hover:from-rose-700 hover:to-rose-900 text-white font-bold rounded-2xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-rose-200 transition-all cursor-pointer active:scale-98"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      <span>Check Out / Clock Out (আজকের ডিউটি শেষ করুন)</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isLocating}
+                      onClick={handleClockIn}
+                      className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-xl transition-colors cursor-pointer text-center"
+                      title="Update or sync earlier check-in time without losing check-out data"
+                    >
+                      Update Check-In / Re-Punch (ইন-টাইম আপডেট / পুন-পাঞ্চ)
+                    </button>
+                  </div>
                 ) : (
                   <div className="p-3.5 bg-slate-100 rounded-2xl border border-slate-200 space-y-2">
                     <div className="text-center">
@@ -781,13 +795,25 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
                       </p>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={handleClockOut}
-                      className="w-full py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
-                    >
-                      Update Clock Out Time (পুনরায় চেক-আউট আপডেট)
-                    </button>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        disabled={isLocating}
+                        onClick={handleClockIn}
+                        className="py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-[11px] font-semibold rounded-xl transition-colors cursor-pointer text-center"
+                        title="Sync or adjust earliest check-in time"
+                      >
+                        Update Check-In
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleClockOut}
+                        className="py-2 bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold rounded-xl transition-colors cursor-pointer text-center shadow-xs"
+                        title="Update latest check-out time"
+                      >
+                        Update Check-Out
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

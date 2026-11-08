@@ -440,11 +440,10 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
         status = 'Official Field Visit (অনুমোদিত ফিল্ড ভিজিট)';
         notes = `Official Field Visit: ${visitMatch.destination || visitMatch.purpose} • Project: ${visitMatch.assignedProject || 'LEEDO'} (Full duty credited)`;
       } else if (hol) {
-        // Official Bangladesh Government Holiday (Paid Day Off)
+        // Official Bangladesh Government Holiday (Unworked: 0 worked hrs logged; only counts if punch/web checkin exists)
         status = `Govt Holiday (সরকারি ছুটি)`;
-        hoursLogged = dailyHours; // Fully credited paid standard duty hours
-        totalWorkedHours = Math.round((totalWorkedHours + dailyHours) * 10) / 10;
-        notes = `Official Gazette Public Holiday: ${hol.titleBangla || hol.title} (Paid Day Off)`;
+        hoursLogged = 0;
+        notes = `Official Gazette Public Holiday: ${hol.titleBangla || hol.title} (Holiday - No Duty)`;
       } else {
         // Check Approved Leave
         const leaveMatch = empLeaves.find(
@@ -1935,7 +1934,7 @@ export const TimesheetModule: React.FC<TimesheetModuleProps> = ({
                             <td className="p-1.5 border-r border-slate-200 font-semibold">
                               {d.isHoliday ? (
                                 <span className="inline-flex items-center gap-1 text-teal-800 font-bold bg-teal-100 px-1.5 py-0.5 rounded text-[10px]">
-                                  <span>🏛️ Govt Holiday (Paid)</span>
+                                  <span>{d.hoursLogged > 0 ? '🏛️ Govt Holiday Duty' : '🏛️ Govt Holiday (Paid)'}</span>
                                 </span>
                               ) : isLateHighlighted ? (
                                 <span className="inline-flex items-center gap-1 text-amber-900 font-bold bg-amber-100 px-1.5 py-0.5 rounded text-[10px]">

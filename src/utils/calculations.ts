@@ -622,3 +622,137 @@ export function formatHours(hours: number | string | undefined | null): string {
   return `${Number(rounded.toFixed(1))} hrs`;
 }
 
+/**
+ * Parses time string (e.g. "09:14:00", "9:14", "10:15 PM") to fractional minutes from midnight.
+ */
+export function parseTimeToMinutes(timeStr: string | undefined | null): number | null {
+  if (!timeStr || typeof timeStr !== 'string') return null;
+  const clean = timeStr.trim().toLowerCase();
+  if (!clean || clean === '--' || clean === '-') return null;
+  const isPM = clean.includes('pm');
+  const isAM = clean.includes('am');
+  const digits = clean.replace(/[^0-9:]/g, '');
+  const parts = digits.split(':').map((p) => parseInt(p, 10));
+  if (parts.length === 0 || isNaN(parts[0])) return null;
+  let h = parts[0];
+  const m = isNaN(parts[1]) ? 0 : parts[1];
+  const s = isNaN(parts[2]) ? 0 : parts[2];
+  if (isPM && h < 12) h += 12;
+  if (isAM && h === 12) h = 0;
+  return h * 60 + m + (s / 60);
+}
+
+/**
+ * Merges two attendance records for the same employee on the same date.
+ * Rule (User Requirement):
+ * - Earliest Clock-In time is preserved ("jei data somoy age thakbe").
+ * - Latest Clock-Out time is preserved ("check out pore thakbe setai rakben").
+ * - Hours worked is recalculated accurately between the earliest In and latest Out.
+ * - Ensures biometric punches, web check-ins, or manual logs are never lost.
+ */
+export function mergeAttendanceRecords(
+  existing: AttendanceRecord,
+  incoming: AttendanceRecord
+): AttendanceRecord {
+  if (!existing && incoming) return incoming;
+  if (existing && !incoming) return existing;
+  if (!existing && !incoming) return existing;
+
+  const in1 = existing.clockInTime && existing.clockInTime !== '--' ? existing.clockInTime : undefined;
+  const in2 = incoming.clockInTime && incoming.clockInTime !== '--' ? incoming.clockInTime : undefined;
+  const minsIn1 = parseTimeToMinutes(in1);
+  const minsIn2 = parseTimeToMinutes(in2);
+
+  // Pick EARLIEST clock-in time
+  let clockInTime: string | undefined = in1 || in2;
+  if (minsIn1 !== null && minsIn2 !== null) {
+    clockInTime = minsIn1 <= minsIn2 ? in1 : in2;
+  } else if (minsIn1 !== null) {
+    clockInTime = in1;
+  } else if (minsIn2 !== null) {
+    clockInTime = in2;
+  }
+
+  const out1 = existing.clockOutTime && existing.clockOutTime !== '--' ? existing.clockOutTime : undefined;
+  const out2 = incoming.clockOutTime && incoming.clockOutTime !== '--' ? incoming.clockOutTime : undefined;
+  const minsOut1 = parseTimeToMinutes(out1);
+  const minsOut2 = parseTimeToMinutes(out2);
+
+  // Pick LATEST clock-out time
+  let clockOutTime: string | undefined = out1 || out2;
+  if (minsOut1 !== null && minsOut2 !== null) {
+    clockOutTime = minsOut1 >= minsOut2 ? out1 : out2;
+  } else if (minsOut1 !== null) {
+    clockOutTime = out1;
+  } else if (minsOut2 !== null) {
+    clockOutTime = out2;
+  }
+
+  // Recalculate hours worked
+  let hoursWorked = 0;
+  const finalMinsIn = parseTimeToMinutes(clockInTime);
+  const finalMinsOut = parseTimeToMinutes(clockOutTime);
+
+  if (finalMinsIn !== null && finalMinsOut !== null && finalMinsOut > finalMinsIn) {
+    const diff = finalMinsOut - finalMinsIn;
+    hoursWorked = Math.max(0.5, Math.round((diff / 60) * 10) / 10);
+  } else {
+    const h1 = Number(existing.hoursWorked) || 0;
+    const h2 = Number(incoming.hoursWorked) || 0;
+    hoursWorked = Math.max(h1, h2, clockInTime && clockOutTime ? 8.0 : 0);
+  }
+
+  // Determine status (Late vs Present vs Field Mission)
+  let status: 'Present' | 'Late' | 'Absent' | 'Field Mission' = 'Present';
+  if (existing.status === 'Field Mission' || incoming.status === 'Field Mission') {
+    status = 'Field Mission';
+  } else if (finalMinsIn !== null) {
+    // Shift starts at 10:00 AM (600 mins) with 15 mins grace (615 mins)
+    const isLate = finalMinsIn > 615;
+    status = isLate ? 'Late' : 'Present';
+  } else {
+    const rawStatus = (existing.status || incoming.status || 'Present') as string;
+    if (rawStatus === 'Late' || rawStatus === 'Absent' || rawStatus === 'Field Mission') {
+      status = rawStatus;
+    } else {
+      status = 'Present';
+    }
+  }
+
+  // Combine location notes preserving details from all sources
+  const notesSet = new Set<string>();
+  if (existing.locationNote) notesSet.add(existing.locationNote.trim());
+  if (incoming.locationNote) notesSet.add(incoming.locationNote.trim());
+  const mergedNote = Array.from(notesSet).join(' • ');
+
+  // Prefer GPS coordinates if either record captured them
+  const latitude = incoming.latitude ?? existing.latitude;
+  const longitude = incoming.longitude ?? existing.longitude;
+  const mapsUrl = incoming.mapsUrl ?? existing.mapsUrl;
+  const locationAccuracy = incoming.locationAccuracy ?? existing.locationAccuracy;
+  const gpsSource = incoming.gpsSource ?? existing.gpsSource;
+
+  const finalClockIn = clockInTime || existing.clockInTime || incoming.clockInTime || '10:00:00';
+
+  return {
+    id: existing.id || incoming.id,
+    employeeId: existing.employeeId || incoming.employeeId,
+    employeeName: incoming.employeeName || existing.employeeName,
+    date: incoming.date || existing.date,
+    clockInTime: finalClockIn,
+    clockOutTime,
+    hoursWorked,
+    status,
+    workMode: incoming.workMode || existing.workMode || 'Office',
+    punchLocationName: incoming.punchLocationName || existing.punchLocationName || 'Head Office',
+    locationNote: mergedNote || existing.locationNote || incoming.locationNote,
+    ipAddress: incoming.ipAddress || existing.ipAddress,
+    gpsSource,
+    latitude,
+    longitude,
+    locationAccuracy,
+    mapsUrl,
+    lateReason: status === 'Late' ? (incoming.lateReason || existing.lateReason || `Clocked in at ${finalClockIn}`) : undefined,
+  };
+}
+

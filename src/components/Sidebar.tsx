@@ -224,8 +224,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           })}
         </nav>
 
-        {/* Footer Area with Logout */}
-        <div className="p-3 border-t border-slate-800/80 bg-slate-950/40">
+        {/* Footer Area with Logout & Developer Credit */}
+        <div className="p-3 border-t border-slate-800/80 bg-slate-950/40 space-y-2">
           <button
             onClick={() => {
               if (isMobileOpen) onCloseMobile();
@@ -236,6 +236,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <LogOut className="w-4 h-4" />
             <span>Log Out of Portal</span>
           </button>
+          <div className="text-center pt-1 border-t border-slate-800/60">
+            <span className="text-[10px] text-slate-500 font-medium tracking-wider">Develop by shadowgili</span>
+          </div>
         </div>
       </aside>
     </>
